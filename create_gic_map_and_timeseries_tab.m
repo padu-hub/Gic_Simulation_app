@@ -83,7 +83,7 @@ function create_gic_map_and_timeseries_tab(app, S, L, b, GIC, tind, timeInput)
 
     % === GIC Type Dropdown ===
     gicTypeDropdown = uidropdown(subGrid, ...
-        'Items', {'Substations', 'Lines', 'Transformers'}, ...
+        'Items', {'Substations', 'Lines', 'Transformers w1', 'Transformers w2'}, ...
         'Value', 'Substations', ...
         'Editable', 'off');
 
@@ -110,8 +110,10 @@ function create_gic_map_and_timeseries_tab(app, S, L, b, GIC, tind, timeInput)
                 names = {S.Name};
             case 'Lines'
                 names = {L.Name};
-            case 'Transformers'
-                names = {app.T.Name};
+            case 'Transformers w1'
+                names = {app.T.Name};           
+            case 'Transformers w2'
+                names = {app.T_w2.Name};
         end
         names = sort(names);
         entityDropdown.Items = names;
@@ -133,10 +135,15 @@ function create_gic_map_and_timeseries_tab(app, S, L, b, GIC, tind, timeInput)
                 idx = find(strcmp({L.Name}, name));
                 y1 = GIC.Lines(idx,:);
                 y2 = GIC.Original_Lines(idx,:);
-            case 'Transformers'
+            case 'Transformers w1'
                 idx = find(strcmp({app.T.Name}, name));
                 y1 = squeeze(GIC.Trans(idx,1,:))';
                 y2 = squeeze(GIC.Original_Trans(idx,1,:))';
+            case 'Transformers w2'
+                idx = find(strcmp({app.T.Name}, name));
+                y1 = squeeze(GIC.Trans(idx,1,:))';
+                y2 = squeeze(GIC.Original_Trans(idx,1,:))';
+            
         end
 
         plot(timeAxes, timeVec, y1, 'r-', 'LineWidth', 1.5, 'DisplayName', 'Edited');

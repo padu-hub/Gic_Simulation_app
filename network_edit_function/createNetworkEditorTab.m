@@ -31,8 +31,8 @@ uilabel(leftGrid, 'Text', 'Toggle Transformers (Sets W1/W2 = NaN) and Toggle Lin
 
 % --- Transformer Table ---
 app.TransTable = uitable(leftGrid);
-app.TransTable.ColumnName = {'Name','Sub','W1', 'W2', 'Enabled'};
-app.TransTable.ColumnEditable = [false, false, false, false, true];
+app.TransTable.ColumnName = {'Name','Sub','W1', 'W2', 'Enabled','DisconnectFromGround'};
+app.TransTable.ColumnEditable = [false, false, false, false, true, true];
 
 app.TransTable.CellEditCallback = @(src, event) handleTransformerToggle(app, event);
 

@@ -34,8 +34,14 @@ t_names = {T.Name}';
 sub = {T.Sub}';
 w1 = num2cell([T.W1]');
 w2 = num2cell([T.W2]');
-app.TransTable.Data = table(t_names, sub, w1, w2, app.TransEnabled', 'VariableNames', {'Name','Sub', 'W1', 'W2', 'Enabled'});
-app.TransTable.ColumnSortable = true;
+enabled = app.TransEnabled';
+bypassFlag = false(numel(T), 1);  % initialize as false
+
+app.TransTable.Data = table(t_names, sub, w1, w2, enabled, bypassFlag, ...
+    'VariableNames', {'Name','Sub','W1','W2','Enabled','Bypass'});
+
+app.TransTable.ColumnName = {'Name','Sub','W1','W2','Enabled','DisconnectFromGround'};
+app.TransTable.ColumnEditable = [false, false, false, false, true, true];  % Only Enable + Bypass editable
 
 %% --- Update Line Table ---
 % Extract relevant data from app.L
