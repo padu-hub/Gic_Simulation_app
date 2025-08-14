@@ -1,0 +1,104 @@
+function create_gic_map_and_timeseries_tab(app, S, L, b, GIC_Subs, tind)
+% CREATE_GIC_MAP_AND_TIMESERIES_TAB - Adds a tab showing a geographic map
+% using geoaxes (no basemap) and a GIC time series panel.
+% Includes substations, magnetic sites, MT sites, cities, and transmission lines.
+
+    %% === Remove previous GIC tab if exists ===
+    existingTabs = findall(app.TabGroup.Children, 'Type', 'uitab', 'Title', 'GIC Overview');
+    delete(existingTabs);
+
+    %% === Create Tab Layout ===
+    gicTab = uitab(app.TabGroup, 'Title', 'GIC Overview');
+    grid = uigridlayout(gicTab, [1 2]);
+    grid.ColumnWidth = {'1x', '2x'};
+
+    %% === Create Time Vector ===
+    timeVec = b(1).times(tind);
+
+    %% === LEFT: geoaxes map (no basemap) ===
+    mapAxes = geoaxes(grid);  % Using geographic axes
+    hold(mapAxes, 'on');
+    title(mapAxes, 'Alberta Substations & Magnetic Sites');
+
+    %% === Extract coordinates ===
+    subLoc = reshape([S.Loc], 2, []).';
+    subLat = subLoc(:,1); subLon = subLoc(:,2);
+    magLat = [b.lat]; magLon = [b.lon];
+
+    %% === Plot substations ===
+    s1 = geoscatter(mapAxes, subLat, subLon, 40, 'o', ...
+        'MarkerFaceColor', [0.3 0.3 0.3], 'MarkerEdgeColor', 'k');
+
+    %% === Plot magnetic observatories ===
+    s2 = geoscatter(mapAxes, magLat, magLon, 60, 'd', ...
+        'MarkerFaceColor', [1 0.5 0], 'MarkerEdgeColor', 'k');
+
+    %% === Simulated MT sites ===
+    mtLat = subLat + 0.3 * randn(size(subLat));
+    mtLon = subLon + 0.3 * randn(size(subLon));
+    s3 = geoscatter(mapAxes, mtLat, mtLon, 25, '^', ...
+        'MarkerFaceColor', [0 0.6 0], 'MarkerEdgeColor', 'k');
+
+    %% === Plot station labels ===
+    for k = 1:numel(b)
+        text(mapAxes, magLat(k)+0.1, magLon(k)+0.1, b(k).site, ...
+            'FontSize', 8, 'Color', 'black');
+    end
+
+    for k = 1:numel(S)
+        label = S(k).Name(1:min(4, strlength(S(k).Name)));
+        text(mapAxes, subLat(k)+0.15, subLon(k), label, ...
+            'FontSize', 8, 'Color', [0.8 0.8 0]);
+    end
+
+    %% === Plot transmission lines ===
+    for k = 1:numel(L)
+        lat = L(k).Loc(:,1);
+        lon = L(k).Loc(:,2);
+        color = [0 0.4 1]; %low voltage, light blue
+        if isfield(L(k), 'Voltage') && L(k).Voltage >= 400
+            color = [0 0 1];  % High voltage: blue
+        end
+        geoplot(mapAxes, lat, lon, '-', 'Color', color, 'LineWidth', 1.5);
+    end
+
+    %% === Finalize map ===
+    legend(mapAxes, [s1, s2, s3], ...
+        {'Substations', 'Magnetic Observatories', 'MT Sites'}, ...
+        'Location', 'northeast');
+    geolimits(mapAxes, 'auto');  % Autoscale view
+    
+    %% === RIGHT: GIC Time Series Panel ===
+    
+    % Sort S by Name alphabetically
+    [sortedNames, sortIdx] = sort({S.Name});
+    S_sorted = S(sortIdx);  % Keep sorted S for later use
+    
+    sidePanel = uipanel(grid, 'Title', 'GIC Time Series');
+    subGrid = uigridlayout(sidePanel, [2 1]);
+    subGrid.RowHeight = {30, '1x'};
+    
+    dropdown = uidropdown(subGrid, ...
+        'Items', sortedNames, ...
+        'Value', sortedNames{1}, ...
+        'Editable', 'off');
+    
+    timeAxes = uiaxes(subGrid);
+    title(timeAxes, sprintf('GIC @ %s', sortedNames{1}));
+    xlabel(timeAxes, 'Time');
+    ylabel(timeAxes, 'GIC (A)');
+    
+    % Callback
+    dropdown.ValueChangedFcn = @(dd, event) updateTimeseries(dd.Value);
+    
+    % Initial plot
+    updateTimeseries(sortedNames{1});
+    
+    function updateTimeseries(subName)
+        idx = find(strcmp({S.Name}, subName));
+        if isempty(idx), return; end
+        plot(timeAxes, timeVec, GIC_Subs(idx,:), 'LineWidth', 1.5);
+        title(timeAxes, sprintf('GIC @ %s', S(idx).Name));
+    end
+
+end

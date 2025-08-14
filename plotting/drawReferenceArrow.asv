@@ -1,0 +1,61 @@
+function drawReferenceArrow(scale, ax, shaftHandle, arrowHandle)
+% Draws a vertical reference arrow on UIAxes with consistent head size
+
+    % === Shaft Vector (Vertical) ===
+    u = 0;
+    v = 1*scale;
+
+    % === Base of the arrow ===
+    baseX = 0.5;
+    baseY = 10;
+    tipX = baseX + u;
+    tipY = baseY + v;
+
+    % === Update shaft handle ===
+    shaftHandle.XData = [baseX, tipX];
+    shaftHandle.YData = [baseY, tipY];
+
+    % === Arrowhead triangle points ===
+    leftX  = tipX - 0.05*(v);
+    leftY  = tipY - 0.05*(v);
+    rightX = tipX + 0.05*(v);
+    rightY = tipY - 0.05*(v);
+
+    % === Update triangle (arrow head) ===
+    arrowHandle.XData = [tipX, leftX, rightX];
+    arrowHandle.YData = [tipY, leftY, rightY];
+
+
+    % Calculate scaled components
+    scaledU = scale * 0;
+    scaledV = scale * 1;
+    
+    % Calculate base and tip positions for the shaft
+    baseX = 0; baseY = 10;
+    tipX = baseX + scaledU; tipY = baseY + scaledV;
+
+    % Update shaft handles
+    app.shaftHandles(i).XData = [baseX, tipX];
+    app.shaftHandles(i).YData = [baseY, tipY];
+    
+    % Arrowhead size (same scale units as u/v)
+    headLength = 0.05;   % along shaft
+    headWidth = 0.025;   % perpendicular to shaft
+    tipX = baseX + u(i); tipY = baseY + v(i);
+
+    % Direction unit vector
+    len = sqrt(u(i)^2 + v(i)^2);
+    if len == 0, continue; end  % skip zero-length arrows
+    ux = u(i) / len;
+    uy = v(i) / len;
+    
+    % Perpendicular unit vector
+    nx = -uy;
+    ny = ux;
+
+    % Arrowhead corners (triangle)
+    leftX  = tipX + headLength * ux + headWidth * nx;
+    leftY  = tipY + headLength * uy + headWidth * ny;
+    rightX = tipX + headLength * ux - headWidth * nx;
+    rightY = tipY + headLength * uy - headWidth * ny;
+end

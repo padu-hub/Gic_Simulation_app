@@ -1,0 +1,147 @@
+function plot_gic_mag_map(app, S, L, tind, b, GIC, timeInput, mode)
+% =========================================================================
+% PLOT_GIC_MAG_MAP - Plots GIC values and magnetic field vectors on a map.
+%
+% Inputs:
+%   S                - Substation struct array (with .Loc)
+%   L                - Line struct array (with .Loc and optional .Voltage)
+%   tind             - Time indices into magnetic field data
+%   b                - Magnetic field struct array (with .x, .y, .times)
+%   timeInput        - Either:
+%                        • [] (default → peak GIC)
+%                        • datetime object to target a specific time
+
+% Plots GIC values on a geographic map with three modes:
+%   1. 'Max GIC'     - Peak GIC magnitude per substation (edited network)
+%   2. 'GIC Change'  - Peak difference between edited and original GIC
+%   3. 'Snapshot'    - GIC values at a specific timeIndex
+% =========================================================================
+
+    % === Time Index Handling (Clamp to valid range) ===
+    if nargin <7 || isempty(timeInput)
+        [~, timeIndex] = max(max(abs(GIC.Subs), [], 1));
+    elseif isdatetime(timeInput)
+        tvec = b(1).times(tind);
+        [~, timeIndex] = min(abs(tvec - timeInput));
+    else
+        timeIndex = timeInput;
+    end
+
+    % Clamp tind to available range
+    timeIndex = max(1, min(timeIndex, size(GIC.Subs, 2)));
+
+    switch mode
+        case {'Max GIC', 'GIC Change', 'Snapshot'}
+            % === Substation Coordinates ===
+            subLoc = reshape([S(:).Loc], 2, []).';
+            subLat = subLoc(:,1);
+            subLon = subLoc(:,2);
+
+            % === Magnetometer Coordinates ===
+            magLat = [b(:).lat];
+            magLon = [b(:).lon];
+
+            % === Map Limits ===
+            latLim = [min(subLat), max(subLat)];
+            lonLim = [min(subLon), max(subLon)];
+            latPad = 0.7 * diff(latLim); lonPad = 0.7 * diff(lonLim);
+            latLim = latLim + [-latPad latPad];
+            lonLim = lonLim + [-lonPad lonPad];
+
+            % === Initialize Map ===
+            figure;
+            worldmap(latLim, lonLim);
+            setm(gca,'FontSize',12);
+            hold on;
+
+            % === Background Map (Optional Shapefiles) ===
+            try
+                provinces = shaperead('province.shp','UseGeoCoords',true);
+                geoshow(provinces,'DisplayType','polygon','DefaultFaceColor',[0.9 1 0.7],'EdgeColor','black');
+            end
+            try
+                states = shaperead('usastatehi','UseGeoCoords',true);
+                geoshow(states,'DisplayType','polygon','DefaultFaceColor',[0.9 1 0.7],'EdgeColor','black');
+            end
+
+            % === Plot Transmission Lines ===
+            for k = 1:numel(L)
+                lat = L(k).Loc(:,1);
+                lon = L(k).Loc(:,2);
+                tcolor = 'k';
+                if isfield(L(k), 'Voltage') && L(k).Voltage >= 400
+                    tcolor = 'b';
+                end
+                plotm(lat, lon, '-', 'Color', tcolor, 'LineWidth', 1.5);
+            end
+
+            % === GIC Bubble Mode Selector ===
+            switch mode
+                case 'Max GIC'
+                    [~, idxMax] = max(abs(GIC.Subs), [], 2);
+                    gicVals = arrayfun(@(i) GIC.Subs(i, idxMax(i)), 1:size(GIC.Subs,1))';
+                    cVals = gicVals;
+                    titleStr = 'Max GIC Magnitude (All Time)';
+
+                case 'GIC Change'
+                    % Compute difference over time
+                    gicDiff = abs(GIC.Subs) - abs(GIC.Original_Subs);                
+                    % Find index of max absolute change for each substation
+                    [~, idxMaxDiff] = max(gicDiff, [], 2);                
+                    % Extract signed change at that peak difference time
+                    gicVals = arrayfun(@(i) gicDiff(i, idxMaxDiff(i)), 1:size(gicDiff,1))';                
+                    cVals = gicVals;
+                    titleStr = 'Max GIC Change (Edited - Original)';
+
+                case 'Snapshot'
+                    gicVals = GIC.Subs(:, timeIndex);
+                    cVals = gicVals;
+                    peakTime = b(1).times(tind(timeIndex));
+                    titleStr = ['GIC Map Snapshot @ ', char(peakTime)];
+            end
+
+            % === Plot Substation GIC as bubbles ===
+            scatterm(subLat, subLon, 30 + 30*abs(gicVals), cVals, ...
+                'filled', 'MarkerEdgeColor', 'k');
+            cb = colorbar;
+            cb.Label.String = 'GIC (A)';
+            colormap jet;
+
+            % === Magnetic Field Vectors ===
+            % refScale = 500;
+            % for k = 1:numel(b)
+            %     if numel(b(k).x) >= timeIndex
+            %         bx = b(k).x(timeIndex);
+            %         by = b(k).y(timeIndex);
+            %     else
+            %         bx = 0; by = 0;
+            %     end
+            %     quivermc(magLat(k), magLon(k), by, bx, 'color','r', ...
+            %         'reference', refScale, 'arrowstyle','tail', 'linewidth', 1.5);
+            %     textm(magLat(k), magLon(k), b(k).site, 'FontSize', 8, ...
+            %         'VerticalAlignment', 'bottom');
+            % end
+
+            % === Plot Cities ===
+            cities = {
+                'Edmonton',      53.5461, -113.4938;
+                'Calgary',       51.0477, -114.0719;
+                'Red Deer',      52.2681, -113.8112;
+                'Fort McMurray', 56.7267, -111.3790;
+                'Lethbridge',    49.6942, -112.8328;
+                'Medicine Hat',  50.0405, -110.6765;
+            };
+            for i = 1:size(cities,1)
+                plotm(cities{i,2}, cities{i,3}, 'sk', 'MarkerFaceColor', 'b');
+                textm(cities{i,2}, cities{i,3}, cities{i,1}, ...
+                    'FontSize', 8, 'VerticalAlignment', 'top');
+            end
+
+            title(titleStr, 'FontSize', 14);
+            hold off;
+
+
+        otherwise
+            error('Unknown mode: %s', mode);
+    end
+end

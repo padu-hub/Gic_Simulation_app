@@ -1,0 +1,173 @@
+function create_gic_map_and_timeseries_tab(app, S, L, b, GIC, tind, timeInput)
+% CREATE_GIC_MAP_AND_TIMESERIES_TAB - Adds a tab showing a map + GIC time series.
+% Supports toggling between Substations, Lines, and Transformers.
+
+    %% === Remove previous GIC tab if exists ===
+    existingTabs = findall(app.TabGroup.Children, 'Type', 'uitab', 'Title', 'GIC Overview');
+    delete(existingTabs);
+
+    %% === Create Tab Layout ===
+    gicTab = uitab(app.TabGroup, 'Title', 'GIC Overview');
+    grid = uigridlayout(gicTab, [1 2]);
+    grid.ColumnWidth = {'1x', '2x'};
+
+    %% === Time Vector ===
+    timeVec = b(1).times(tind);
+    
+    
+    %% === Time Index Handling (Clamp to valid range) ===
+    if nargin <7 || isempty(timeInput)
+        [~, timeIndex] = max(max(abs(GIC.Subs), [], 1));
+    elseif isdatetime(timeInput)
+        tvec = b(1).times(tind);
+        [~, timeIndex] = min(abs(tvec - timeInput));
+    else
+        timeIndex = timeInput;
+    end
+
+    % Clamp tind to available range
+    timeIndex = max(1, min(timeIndex, size(GIC.Subs, 2)));
+    
+    %% === LEFT: geoaxes map ===
+    mapAxes = geoaxes(grid);
+    hold(mapAxes, 'on');
+    title(mapAxes, 'Alberta Substations & Magnetic Sites');
+
+    % Coordinates
+    subLoc = reshape([S.Loc], 2, []).';
+    subLat = subLoc(:,1); subLon = subLoc(:,2);
+    magLat = [b.lat]; magLon = [b.lon];
+
+    % Map scatter plots
+    s1 = geoscatter(mapAxes, subLat, subLon, 40, 'o', ...
+        'MarkerFaceColor', [0.3 0.3 0.3], 'MarkerEdgeColor', 'k');
+    s2 = geoscatter(mapAxes, magLat, magLon, 60, 'd', ...
+        'MarkerFaceColor', [1 0.5 0], 'MarkerEdgeColor', 'k');
+    mtLat = subLat + 0.03 * randn(size(subLat));
+    mtLon = subLon + 0.03 * randn(size(subLon));
+    s3 = geoscatter(mapAxes, mtLat, mtLon, 25, '^', ...
+        'MarkerFaceColor', [0 0.6 0], 'MarkerEdgeColor', 'k');
+
+    % Labels
+    for k = 1:numel(b)
+        text(mapAxes, magLat(k)+0.1, magLon(k)+0.1, b(k).site, 'FontSize', 8, 'Color', 'black');
+    end
+    for k = 1:numel(S)
+        label = S(k).Name(1:min(4, strlength(S(k).Name)));
+        text(mapAxes, subLat(k)+0.15, subLon(k), label, 'FontSize', 8, 'Color', [0.8 0.8 0]);
+    end
+
+    % Lines
+    lat = []; lon = []; latHi = []; lonHi = [];
+    for i = 1:numel(L)
+        if L(i).Voltage < 400
+            lat = [lat; L(i).Loc(:,1); NaN];
+            lon = [lon; L(i).Loc(:,2); NaN];
+        else
+            latHi = [latHi; L(i).Loc(:,1); NaN];
+            lonHi = [lonHi; L(i).Loc(:,2); NaN];
+        end
+    end
+    geoplot(mapAxes, lat, lon, '-', 'Color', 'k', 'LineWidth', 3);
+    geoplot(mapAxes, latHi, lonHi, '-', 'Color', [0.5 0.5 0.5], 'LineWidth', 3);
+
+    legend(mapAxes, [s1, s2, s3], {'Substations', 'Magnetic Observatories', 'MT Sites'}, 'Location', 'northeast');
+    geolimits(mapAxes, 'auto');
+
+    %% === RIGHT: GIC Time Series Panel ===
+    sidePanel = uipanel(grid, 'Title', 'GIC Time Series');
+    subGrid = uigridlayout(sidePanel, [3 1]);
+    subGrid.RowHeight = {30, 30, '1x'};
+
+    % === GIC Type Dropdown ===
+    gicTypeDropdown = uidropdown(subGrid, ...
+        'Items', {'Substations', 'Lines', 'Transformers'}, ...
+        'Value', 'Substations', ...
+        'Editable', 'off');
+
+    % === Name Dropdown ===
+    entityDropdown = uidropdown(subGrid, 'Editable', 'off');
+
+    % === Axes ===
+    timeAxes = uiaxes(subGrid);
+    title(timeAxes, '');
+    xlabel(timeAxes, 'Time');
+    ylabel(timeAxes, 'GIC (A)');
+
+    % === Setup initial list ===
+    updateEntityDropdown();
+
+    % === Callbacks ===
+    gicTypeDropdown.ValueChangedFcn = @(src, event) updateEntityDropdown();
+    entityDropdown.ValueChangedFcn = @(src, event) updateTimeseries();
+
+    %% === Internal Functions ===
+    function updateEntityDropdown()
+        switch gicTypeDropdown.Value
+            case 'Substations'
+                names = {S.Name};
+            case 'Lines'
+                names = {L.Name};
+            case 'Transformers'
+                names = {app.T.Name};
+        end
+        names = sort(names);
+        entityDropdown.Items = names;
+        entityDropdown.Value = names{1};
+        updateTimeseries();
+    end
+
+    function updateTimeseries()
+        type = gicTypeDropdown.Value;
+        name = entityDropdown.Value;
+        cla(timeAxes);
+
+        switch type
+            case 'Substations'
+                idx = find(strcmp({S.Name}, name));
+                y1 = GIC.Subs(idx,:);
+                y2 = GIC.Original_Subs(idx,:);
+            case 'Lines'
+                idx = find(strcmp({L.Name}, name));
+                y1 = GIC.Lines(idx,:);
+                y2 = GIC.Original_Lines(idx,:);
+            case 'Transformers'
+                idx = find(strcmp({app.T.Name}, name));
+                y1 = squeeze(GIC.Trans(idx,1,:))';
+                y2 = squeeze(GIC.Original_Trans(idx,1,:))';
+        end
+
+        plot(timeAxes, timeVec, y1, 'r-', 'LineWidth', 1.5, 'DisplayName', 'Edited');
+        hold(timeAxes, 'on');
+        plot(timeAxes, timeVec, y2, 'b--', 'LineWidth', 1.5, 'DisplayName', 'Original');
+        hold(timeAxes, 'off');
+
+        title(timeAxes, sprintf('GIC @ %s (%s)', name, type));
+        legend(timeAxes, 'show', 'Location', 'best');
+        addGraphToStorage(app, timeAxes, sprintf('GIC @ %s (%s)', name, type));
+    end
+
+    % === Create new App Tab ===
+    existingTabs = findall(app.TabGroup.Children, 'Type', 'uitab', 'Title', 'Substation Schematic');
+    delete(existingTabs);  % remove if exists
+
+    tab = uitab(app.TabGroup, 'Title', 'Substation Schematic');
+    mainLayout = uigridlayout(tab, [2,1]);
+    mainLayout.RowHeight = {'1x', '6x'};
+    topLayout = uigridlayout(mainLayout, [1,2]);
+    topLayout.ColumnWidth = {'10x', '1x'};
+    ax = uiaxes(mainLayout); hold(ax, 'on');
+    ax.XColor = 'none'; ax.YColor = 'none';
+    ax.Title.String = 'Substation Schematic';
+
+    subNames = string({S.Name});
+    dd = uidropdown(topLayout, 'Items', subNames);
+    dd.Layout.Column = 1;
+    dd.Value = subNames(1);
+
+    btn = uibutton(topLayout, 'Text', 'Draw');
+    btn.Layout.Column = 2;
+
+    btn.ButtonPushedFcn = @(~,~) draw_schematic(dd.Value, ax, L, T, GIC, timeIndex);
+
+end

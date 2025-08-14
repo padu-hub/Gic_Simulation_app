@@ -1,0 +1,34 @@
+function styleInfo = applyExportStyling(ax, bgColor)
+%APPLYEXPORTSTYLING Set adaptive axes, title, and legend styling for export
+
+    % Determine contrasting text color
+    switch lower(bgColor)
+        case 'black'
+            textColor = 'white';
+        otherwise
+            textColor = 'black';
+    end
+
+    % Save axes styles
+    styleInfo.AxesColor = ax.Color;
+    styleInfo.XColor = ax.XColor;
+    styleInfo.YColor = ax.YColor;
+    styleInfo.ZColor = ax.ZColor;
+    styleInfo.TitleColor = ax.Title.Color;
+
+    legend(ax, ...
+    'Color', bgColor, ...          % Legend background
+    'TextColor', textColor, ...    % Legend font color
+    'EdgeColor', textColor, ...    % Border color
+    'Box', 'on', ...               % include border
+    'Location', 'southwest');      % Position
+
+    % Set axis and title styling
+    ax.Color = bgColor;
+    ax.XColor = textColor;
+    ax.YColor = textColor;
+    ax.ZColor = textColor;
+    ax.Title.Color = textColor;
+
+    drawnow;
+end

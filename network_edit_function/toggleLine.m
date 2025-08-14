@@ -1,0 +1,22 @@
+function toggleLine(app, idx, newState)
+% Set the line to the state explicitly
+app.LineEnabled(idx) = newState;
+
+if ~newState
+    app.L(idx).ResKm = NaN;
+    app.L(idx).Resistance = NaN;
+    app.LinePlots(idx).Color = [0.5 0.5 0.5];
+else
+    app.L(idx).ResKm = app.OriginalL(idx).ResKm;
+    app.L(idx).Resistance = app.OriginalL(idx).Resistance;
+    if isfield(app.L(idx), 'Voltage') && app.L(idx).Voltage >= 400
+        app.LinePlots(idx).Color = 'b';
+    else
+        app.LinePlots(idx).Color = 'r';
+    end
+end
+
+% Update table
+app.LineTableData.Enabled(idx) = newState;
+app.LineTable.Data = app.LineTableData;
+end

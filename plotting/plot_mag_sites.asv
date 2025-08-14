@@ -1,0 +1,158 @@
+function plot_mag_sites(app, tidx, siteIndices, magPanel, controlPanel, mapPanel)
+% PLOT_MAG_SITES - Plots magnetic field time series and spectra for selected sites
+% with interactive brushing for spike removal. Includes Reset and Save B buttons
+% with visual lamp indicator when data has been edited.
+% 
+% Inputs:
+%   app          - App Designer app object
+%   tidx         - Time index window for plotting (e.g., 12am to 3am)
+%   siteIndices  - Indices of sites to display
+%   magPanel     - Panel to hold plots
+%   controlPanel - Panel to hold Clean Mode UI controls
+%   mapPanel     - Panel to show geographic map of selected sites
+
+    %% === Input Validation and Setup ===
+    if nargin < 6 || isempty(magPanel) || ~isvalid(magPanel)
+        warning("Invalid or missing panel.");
+        return;
+    end
+    delete(allchild(magPanel));
+    delete(allchild(controlPanel));
+    delete(allchild(mapPanel));
+
+    if ~isfield(app, "b_original")
+        app.b_original = app.b_cleaned;
+    end
+
+    n = length(siteIndices);
+    rowHeight = 480;
+    totalHeight = max(rowHeight * n, magPanel.Position(4));
+    innerPanel = uipanel(magPanel, 'Units', 'pixels', 'Position', [0 0 magPanel.Position(3) totalHeight]);
+    magPanel.Scrollable = 'on';
+
+    %% === Control Panel UI: Reset, Save, and Lamp ===
+    controlGrid = uigridlayout(controlPanel, [3 1]);
+    controlGrid.RowHeight = {'fit', 'fit', 'fit'};
+    controlGrid.Padding = [5 5 5 5];
+
+    % Reset Button
+    uibutton(controlGrid, 'Text', 'Reset b', ...
+        'ButtonPushedFcn', @(~,~) reset_b_data());
+
+    % Save Button
+    uibutton(controlGrid, 'Text', 'Save b_cleaned', ...
+        'ButtonPushedFcn', @(~,~) save_and_refresh());
+
+    % Lamp to indicate edited
+    app.EditLamp = uilamp(controlGrid);
+    app.EditLamp.Color = [0 1 0];  % Initially Green
+    app.EditLamp.Layout.Row = 3;
+    app.EditLamp.Layout.Column = 1;
+
+    %% === Plot Geographic Site Map ===
+    axMap = geoaxes(mapPanel);
+    geoplot(axMap, [app.b_cleaned(:).lat], [app.b_cleaned(:).lon], 'o', 'MarkerFaceColor', 'w', 'MarkerEdgeColor', 'k'); hold(axMap, 'on');
+    geoplot(axMap, [app.b_cleaned(siteIndices).lat], [app.b_cleaned(siteIndices).lon], 'o', 'MarkerFaceColor', 'r', 'MarkerEdgeColor', 'k');
+
+    %% === Per-Site Loop for Plotting ===
+    b = app.b_cleaned;
+    for k = 1:n
+        is = siteIndices(k);
+        if is == 0 || is > length(b); continue; end
+
+        nt = min([length(tidx), length(b(is).times), ...
+            length(b(is).x), length(b(is).y)]);
+        tt = tidx(1:nt);
+        tvals = b(is).times(tt);
+        xvals = b(is).x(tt);
+        yvals = b(is).y(tt);
+        yBase = totalHeight - k * rowHeight + 20;
+
+        %% === Time Series Plot ===
+        ax1 = uiaxes(innerPanel);
+        ax1.Position = [20, yBase + 240, magPanel.Position(3) - 40, 180];
+        h1 = plot(ax1, tvals, xvals - nanmean(xvals), '-b'); hold(ax1, 'on');
+        h2 = plot(ax1, tvals, yvals - nanmean(yvals), '-r');
+        title(ax1, ['Time Series for ', upper(b(is).site)]);
+        ylabel(ax1, 'B (nT)');
+        legend(ax1, 'Bx', 'By');
+
+        %% === Frequency Plot ===
+        ax2 = uiaxes(innerPanel);
+        ax2.Position = [20, yBase, magPanel.Position(3) - 40, 180];     
+        bfreq = app.b_freq(is);    % Then use app.b_freq
+        nf = length(bfreq.f);
+        loglog(ax2, bfreq.f, abs(bfreq.X(1:nf)), '-b'); hold(ax2, 'on');
+        loglog(ax2, bfreq.f, abs(bfreq.Y(1:nf)), '-r');
+        title(ax2, ['Spectrum for ', upper(bfreq.site)]);
+        xlabel(ax2, 'Frequency (Hz)');
+        ylabel(ax2, '|B|');
+
+        %% === Enable Brushing ===
+        brush(app.UIFigure, 'on');
+        h1.BrushData = zeros(size(xvals));
+        h2.BrushData = zeros(size(yvals));
+    end
+
+    %% === Reset Button Callback ===
+    function reset_b_data()
+        app.b_cleaned = app.b_original;
+        app.EditLamp.Color = [0 1 0];  % Green
+        app.b_freq = conv_to_freqD(app.b_cleaned, app.freqmenu);
+        assignin('base', 'b_cleaned', app.b_cleaned);
+        plot_mag_sites(app, tidx, siteIndices, magPanel, controlPanel, mapPanel);
+        app.StatusTextArea.Value = "🔁 b reset to original.";
+    end
+
+%% === Save Button Callback ===
+function save_and_refresh()
+    % Update b_cleaned from plot lines
+    lines = findall(app.UIFigure, 'Type', 'line');
+    for i = 1:length(lines)
+        h = lines(i);
+
+        % Only handle lines with brush data on time-series axes
+        if isprop(h, 'BrushData') && ~isempty(h.BrushData) && ~isempty(h.Parent.Title.String)
+            siteTitle = h.Parent.Title.String;
+            siteName = strrep(siteTitle, 'Time Series for ', '');
+            siteIdx = find(strcmpi(siteName, {app.b_cleaned.site}));
+
+            if isempty(siteIdx); continue; end
+
+            % Time index for this plot
+            isBlue = isequal(h.Color, [0 0 1]);  % Bx
+            isRed  = isequal(h.Color, [1 0 0]);  % By
+
+            % Only modify brushed points
+            brushed = logical(h.BrushData);
+            if ~any(brushed); continue; end  % skip if nothing brushed
+
+            if isBlue
+                raw = app.b_cleaned(siteIdx).x(tt);
+                delta = cleaned_mean_offset(h.YData, raw);
+                raw(brushed) = delta(brushed);
+                app.b_cleaned(siteIdx).x(tt) = raw;
+            elseif isRed
+                raw = app.b_cleaned(siteIdx).y(tt);
+                delta = cleaned_mean_offset(h.YData, raw);
+                raw(brushed) = delta(brushed);
+                app.b_cleaned(siteIdx).y(tt) = raw;
+            end
+        end
+    end
+
+    % Update frequency-domain data
+    app.b_freq = conv_to_freqD(app.b_cleaned, app.freqmenu);
+    assignin('base', 'b_cleaned', app.b_cleaned);
+    app.StatusTextArea.Value = "✅ Brushed points removed and b_cleaned saved.";
+    app.EditLamp.Color = [1 0 0];  % Red
+end
+
+% Helper to reapply original mean offset
+function y_out = cleaned_mean_offset(edited_y, original_y)
+    delta = edited_y + nanmean(original_y);
+    y_out = delta;
+end
+
+
+end
