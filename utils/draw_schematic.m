@@ -1,59 +1,61 @@
-function h = draw_schematic(subName, ax, L, T, GIC, timeIndex)
-%DRAW_SCHEMATIC  Substation one-page schematic with GIC flows.
-%  h = draw_schematic(subName, ax, L, T, GIC, timeIndex)
+function draw_schematic(b, mode, subName, iSub, ax, L, T, GIC, specTime)
+%DRAW_SCHEMATIC  One-page substation view: lines in/out, xfmrs, and ground flow.
+% Sign rule used here (your rule): for wye/auto windings, +GIC => to ground.
 %
-%  Inputs
-%    subName   : char/str — substation name to plot (match against L.fromSub/L.toSub and T.Sub)
-%    ax        : axes handle to draw into (created/cleared by caller)
-%    L         : struct array of lines with fields:
-%                  .Name, .fromSub, .toSub  (case-insensitive)
-%                (optional helpful fields, if present: .Voltage)
-%    T         : struct array of transformers with fields:
-%                  .Name, .Sub, .HV_Type, .LV_Type  (used only for label)
-%    GIC       : struct with fields (any non-required field is handled gracefully):
-%                  .Lines (nLines x nTime) — line GIC; positive flows from fromSub→toSub
-%                  .Trans (nTrans x nWindings x nTime) — transformer GIC per winding
-%                        Convention assumed: winding #1 = HV(series), #2 = LV(common/neutral)
-%                  .Subs  (nSubs x nTime) — OPTIONAL, total substation neutral current if available
-%    timeIndex : scalar time step index
+% Inputs:
+%   subName  : substation name to plot
+%   ax       : target axes / UIAxes
+%   L        : line struct array with .Name .fromSub .toSub (case-insensitive)
+%   T        : transformer struct array with .Name .Sub .HV_Type .LV_Type
+%   GIC      : struct with GIC.Lines (nL x nT), GIC.Trans (nTxf x 2 x nT) [W1,W2]
+%   timeIndex: time step index
 %
-%  Output
-%    h         : struct of handles for customization (lines, texts, symbols)
-%
-%  Notes/assumptions
-%    • Line direction: GIC.Lines(i,t) > 0 means current flows from L(i).fromSub to L(i).toSub.
-%      At the "from" end this is OUTGOING; at the "to" end it is INCOMING.
-%    • Ground/neutral flow: If GIC.Subs is unavailable, we estimate substation ground current as
-%      the sum of the LV/common (winding #2 when present, otherwise #1) currents of the
-%      transformers at that substation, at timeIndex.
-%    • All magnitudes are plotted in amperes and arrows point in the physical flow direction
-%      with respect to the plotted substation node (center bus).
+% Output:
+%   h        : handles (lines/text), optional for custom tweaks
 
-    if nargin < 6, error('draw_schematic:args','Need subName, ax, L, T, GIC, timeIndex'); end
+    if nargin < 8, error('Time mode, Need subName, ax, L, T, GIC, timeIndex'); end
 
-    % ---- Setup canvas ----------------------------------------------------
-    cla(ax); hold(ax,'on'); axis(ax,[0 10 0 10]); axis(ax,'off'); daspect(ax,[1 1 1]);
-    h = struct('lines',[],'lineText',[],'xfers',[],'xfText',[],'ground',[],'notes',[]);
+    
+                % === GIC Bubble Mode Selector ===
+    switch mode
+        case 'Display schematic at max'
+                     
+            row   = GIC.Subs(iSub, :);                % 1 × nTime
+            [~, idxMax] = max(abs(row), [], 2);       % single scalar index
+            timeIndex = idxMax;
 
-    title(ax, sprintf('GIC Schematic — %s (t = %d)', subName, timeIndex), ...
-         'FontWeight','bold','FontSize',12);
+        case 'Display schematic at chosen time'
+            timeIndex = specTime;
 
-    % Center "bus" bar for the substation node
-    plot(ax,[4.2 5.8],[6.5 6.5],'k-','LineWidth',3);  % thick node
-    text(ax,5,7.0, subName,'HorizontalAlignment','center','FontWeight','bold');
+    end
+    
+    
+    
+    
+    % Canvas
+    cla(ax); hold(ax,'on'); axis(ax,[0 10 0 10]); axis(ax,'off'); daspect(ax,[1 1 1]);    
+    
+    % Time label
+    timeLbl = sprintf('Time: %s', datestr(b(1).times(timeIndex), 'yyyy-mmm-dd HH:MM:SS'));
+    title(ax, sprintf('GIC Schematic — %s\n%s', subName, timeLbl), 'FontWeight','bold');
 
-    % Small helper colors
-    cLine = [0 0.45 0.85]; % blue
-    cXfr  = [0.85 0.33 0.1]; % orange
-    cGrnd = [0.2 0.6 0.2];   % green
-    yTop  = 9.2; dy = 1.1; yLines = yTop;
-    yXfr  = 4.8;            % start lower block for transformers
+    % Center bus
+    plot(ax,[4.2 5.8],[6.5 6.5],'k-','LineWidth',3);
+    text(ax,5,7.05,subName,'HorizontalAlignment','center','FontWeight','bold');
 
-    % ---- Collect incident lines for this substation ----------------------
-    nL = numel(L);
-    incoming = []; outgoing = []; labelsIn = {}; labelsOut = {}; valsIn = []; valsOut = [];
+    % Colors
+    cLine = [0 0.45 0.85];   % lines
+    cXfr  = [0.85 0.33 0.10];% transformers
+    cGrnd = [0.15 0.55 0.15];% ground
 
-    for i = 1:nL
+    % ========= Lines: split into incoming (left) and outgoing (right) =========
+    yTop = 9.2; dy = 1.05;
+    yL  = yTop; yR = yTop;
+
+    inSum  = 0;   % signed toward node (+)
+    outSum = 0;   % signed away  from node (-)
+
+    for i = 1:numel(L)
         if ~isfield(L(i),'fromSub') || ~isfield(L(i),'toSub'), continue; end
         isFrom = strcmpi(L(i).fromSub, subName);
         isTo   = strcmpi(L(i).toSub,   subName);
@@ -61,187 +63,161 @@ function h = draw_schematic(subName, ax, L, T, GIC, timeIndex)
 
         I = NaN;
         if isfield(GIC,'Lines') && size(GIC.Lines,1) >= i && size(GIC.Lines,2) >= timeIndex
-            I = GIC.Lines(i, timeIndex); % +ve: from -> to
+            I = GIC.Lines(i,timeIndex);  % + means fromSub -> toSub
         end
 
-        if isTo   % at "to" end, +ve means INCOMING
-            incoming(end+1) = i; %#ok<AGROW>
-            valsIn(end+1)   = I; %#ok<AGROW>
-            labelsIn{end+1} = safestr(getfieldor(L(i),'Name',sprintf('Line %d',i))); %#ok<GFLD,AGROW>
-        elseif isFrom % at "from" end, +ve means OUTGOING
-            outgoing(end+1) = i; %#ok<AGROW>
-            valsOut(end+1)  = I; %#ok<AGROW>
-            labelsOut{end+1}= safestr(getfieldor(L(i),'Name',sprintf('Line %d',i))); %#ok<AGROW>
+        if isTo % at the "to" end, + means INCOMING to this node
+            y = yL; yL = yL - dy;
+            plot(ax,[1 4.2],[y y],'Color',cLine,'LineWidth',2);
+            draw_arrow(ax, 3.6, y, 4.2, y, cLine);    % toward node
+            text(ax, 1.1, y+0.25, sprintf('%s\n%.1f A', safeName(L(i)), I), ...
+                 'Color',cLine,'FontSize',9,'HorizontalAlignment','left');
+            inSum = inSum + I;  % toward node
+        else % isFrom; + means OUTGOING from this node
+            y = yR; yR = yR - dy;
+            plot(ax,[5.8 9],[y y],'Color',cLine,'LineWidth',2);
+            draw_arrow(ax, 5.8, y, 6.4, y, cLine);    % away from node
+            text(ax, 8.9, y+0.25, sprintf('%.1f A\n%s', I, safeName(L(i))), ...
+                 'Color',cLine,'FontSize',9,'HorizontalAlignment','right');
+            outSum = outSum - I; % away from node (negative toward-node sum)
         end
     end
 
-    % ---- Draw incoming (left) and outgoing (right) lines -----------------
-    % Incoming on left (x from 1 -> node), Outgoing on right (node -> 9)
-    % Arrows point toward the node for incoming; away from node for outgoing.
-    for k = 1:numel(incoming)
-        i = incoming(k);
-        y = yLines; yLines = yLines - dy;
-        plot(ax,[1 4.2],[y y],'Color',cLine,'LineWidth',2);
-        draw_arrow(ax, 3.6, y, 4.2, y, cLine); % towards node
-        I = valsIn(k);
-        unit = 'A';
-        t = text(ax, 1.1, y+0.25, sprintf('%s\n%.1f %s', labelsIn{k}, I), ...
-                 'Color',cLine,'FontSize',9,'HorizontalAlignment','left','VerticalAlignment','bottom');
-        h.lines = [h.lines; i];
-        h.lineText = [h.lineText; t];
-    end
+    if yL < yTop, plot(ax,[4.2 4.2],[yL 6.5],'k:'); end
+    if yR < yTop, plot(ax,[5.8 5.8],[yR 6.5],'k:'); end
 
-    % reset for right side stacking separately so counts don't collide if many on each side
-    yLinesR = yTop;
-    for k = 1:numel(outgoing)
-        i = outgoing(k);
-        y = yLinesR; yLinesR = yLinesR - dy;
-        plot(ax,[5.8 9],[y y],'Color',cLine,'LineWidth',2);
-        draw_arrow(ax, 5.8, y, 6.4, y, cLine); % away from node
-        I = valsOut(k);
-        t = text(ax, 8.9, y+0.25, sprintf('%.1f A\n%s', I, labelsOut{k}), ...
-                 'Color',cLine,'FontSize',9,'HorizontalAlignment','right','VerticalAlignment','bottom');
-        h.lines = [h.lines; i]; %#ok<AGROW>
-        h.lineText = [h.lineText; t]; %#ok<AGROW>
-    end
+    % ===================== Transformers & ground per xfmr =====================
+    tHere = find(strcmpi({T.Sub}, subName));
+    yX = 4.75;
+    subGroundSum = 0;   % sum of grounded-winding currents (signed; + to ground)
 
-    % dashed droppers to node (visual)
-    if ~isempty(incoming), plot(ax,[4.2 4.2],[yLines 6.5],'k:'); end
-    if ~isempty(outgoing), plot(ax,[5.8 5.8],[yLinesR 6.5],'k:'); end
-
-    % ---- Transformers block ---------------------------------------------
-    % Find transformers at this substation
-    tIdx = find(strcmpi({T.Sub}, subName));
-    if isempty(tIdx)
-        text(ax,5, yXfr, 'No transformers found','HorizontalAlignment','center');
+    if isempty(tHere)
+        text(ax,5, yX, 'No transformers found','HorizontalAlignment','center');
     else
-        y = yXfr;
-        for kk = 1:numel(tIdx)
-            ti = tIdx(kk);
-            % Try to retrieve winding GICs robustly
-            I_HV = NaN; I_LV = NaN;
-            if isfield(GIC,'Trans') && size(GIC.Trans,1) >= ti && size(GIC.Trans,3) >= timeIndex
-                % Detect number of windings dimension
-                nW = size(GIC.Trans,2);
-                if nW >= 1, I_HV = GIC.Trans(ti,1,timeIndex); end
-                if nW >= 2, I_LV = GIC.Trans(ti,2,timeIndex); else, I_LV = I_HV; end
+        for kk = 1:numel(tHere)
+            ti = tHere(kk);
+            % W1/W2 GIC at timeIndex (robustly)
+            Iw1 = getG(GIC, ti, 1, timeIndex);
+            Iw2 = getG(GIC, ti, 2, timeIndex);
+
+            % Draw transformer
+            draw_transformer_symbol(ax, 4.8, yX, cXfr);
+            plot(ax,[4.8 5.0],[yX+0.60 6.5],'Color',[0.35 0.35 0.35]); % lead to bus
+
+            % Labels
+            conn = sprintf('%s/%s', lowerOrQ(T(ti),'HV_Type'), lowerOrQ(T(ti),'LV_Type'));
+            text(ax, 5.05, yX+0.86, safeName(T(ti)), 'FontWeight','bold','Color',cXfr,'HorizontalAlignment','left');
+            text(ax, 5.05, yX+0.62, conn, 'Color',[0.3 0.3 0.3],'HorizontalAlignment','left');
+            text(ax, 5.05, yX+0.32, sprintf('W1: %.1f A   W2: %.1f A', Iw1, Iw2), ...
+                 'Color',cXfr,'HorizontalAlignment','left','FontSize',9);
+
+            % Draw ground symbol(s) where applicable & flow arrow
+            % Rule: if winding type is wye|auto → it has a path to ground
+            xg = 3.9; dx = 0.55; % place ground(s) to left of symbol
+            drewAny = false;
+
+            if isGrounded(T(ti),'HV_Type')
+                draw_ground(ax, xg, yX+0.40, cGrnd);
+                draw_updown_arrow(ax, xg, yX+0.55, signToDown(Iw1), cGrnd); % + => down
+                text(ax, xg-0.05, yX+0.75, sprintf('%.1f A', Iw1), ...
+                     'HorizontalAlignment','right','Color',cGrnd,'FontSize',9);
+                subGroundSum = subGroundSum + Iw1;
+                drewAny = true; xg = xg - dx;
+            end
+            if isGrounded(T(ti),'LV_Type')
+                draw_ground(ax, xg, yX-0.10, cGrnd);
+                draw_updown_arrow(ax, xg, yX+0.05, signToDown(Iw2), cGrnd);
+                text(ax, xg-0.05, yX+0.25, sprintf('%.1f A', Iw2), ...
+                     'HorizontalAlignment','right','Color',cGrnd,'FontSize',9);
+                subGroundSum = subGroundSum + Iw2;
+                drewAny = true;
             end
 
-            % Symbol & labels
-            conn = sprintf('%s/%s', safestr(getfieldor(T(ti),'HV_Type','?')), safestr(getfieldor(T(ti),'LV_Type','?')));
-            draw_transformer_symbol(ax, 4.8, y, cXfr);
-            plot(ax,[4.8 5.0],[y+0.6 6.5],'Color',[0.3 0.3 0.3],'LineStyle','-'); % lead to node
+            if ~drewAny
+                % No grounded winding → gray hint (delta–delta, etc.)
+                text(ax, 3.9, yX, '(no grounded winding)', 'Color',[0.55 0.55 0.55], ...
+                     'HorizontalAlignment','right','FontAngle','italic','FontSize',9);
+            end
 
-            text(ax, 5.0, y+0.85, safestr(getfieldor(T(ti),'Name',sprintf('T%d',ti))), ...
-                 'HorizontalAlignment','left','FontWeight','bold','Color',cXfr);
-            text(ax, 5.0, y+0.55, conn, 'HorizontalAlignment','left','Color',[0.25 0.25 0.25]);
-
-            txt = sprintf('HV(series): %.1f A\nLV(common): %.1f A', I_HV, I_LV);
-            tx = text(ax, 5.0, y+0.15, txt, 'HorizontalAlignment','left','Color',cXfr,'FontSize',9);
-            h.xfers = [h.xfers; ti]; %#ok<AGROW>
-            h.xfText = [h.xfText; tx]; %#ok<AGROW>
-
-            y = y - 1.1;
+            yX = yX - 1.10;
         end
     end
 
-    % ---- Ground / neutral current for the substation ---------------------
-    Iground = NaN;
-    % Preferred: use provided substation total if available (requires mapping).
-    if isfield(GIC,'Subs') && ~isempty(GIC.Subs)
-        % Build a simple name->index map from transformers if possible
-        subsList = unique(lower(strtrim({T.Sub})));
-        subIdx = find(strcmpi(subsList, subName), 1);
-        if ~isempty(subIdx) && size(GIC.Subs,1) >= subIdx && size(GIC.Subs,2) >= timeIndex
-            Iground = GIC.Subs(subIdx, timeIndex);
-        end
-    end
-    % Fallback: sum LV/common winding currents of xfmrs at this sub
-    if isnan(Iground)
-        if exist('tIdx','var') && ~isempty(tIdx) && isfield(GIC,'Trans')
-            lvCol = min(2, max(1, size(GIC.Trans,2))); % use 2 if exists, else 1
-            vals = arrayfun(@(ii) safeTrans(GIC.Trans, ii, lvCol, timeIndex), tIdx);
-            Iground = nansum(vals);
-        end
-    end
-    % Draw ground symbol below node
+    % ===================== Substation ground total ============================
+    % Vertical drop from bus to site ground + symbol + label
     plot(ax,[5 5],[6.5 5.6],'k-','LineWidth',1.5);
-    draw_ground(ax, 5, 5.4, cGrnd);
-    text(ax, 5.2, 5.75, sprintf('To ground: %.1f A', Iground), ...
+    draw_ground(ax, 5, 5.35, cGrnd);
+
+    % Sum = Σ lines toward node (inSum) + Σ lines away (outSum) should balance Σ grounded windings
+    % But you asked to show *what's flowing to ground* at the sub: we take the grounded-winding sum.
+    text(ax, 5.2, 5.75, sprintf('To ground (sub): %.1f A', subGroundSum), ...
          'Color',cGrnd,'HorizontalAlignment','left','FontWeight','bold');
 
-    % ---- KCL / balance note (incoming to node counted +, outgoing −, minus ground) ----
-    sigIn  = sum_signed(valsIn, +1);  % + toward node
-    sigOut = sum_signed(valsOut, -1); % − away from node
-    residual = (sigIn + sigOut) - Iground; % should ~ 0
-    h.notes = text(ax, 5, 4.6, sprintf('KCL residual ≈ %.2f A', residual), ...
-                   'HorizontalAlignment','center','Color',[0.2 0.2 0.2]);
-
-    % ---- Nice legend cue (optional voltage badges if present) ------------
-    if any(isfield(L,{'Voltage'}))
-        text(ax, 1.0, 0.8, 'Line colors: blue; Xfmrs: orange; Ground: green', 'FontSize',8,'Color',[0.2 0.2 0.2]);
-    end
+    % Optional quick balance check (can comment out)
+    residual = (inSum + outSum) - subGroundSum; % should be ~0 if everything aligns
+    text(ax, 5.0, 4.65, sprintf('KCL residual ≈ %.2f A', residual), ...
+         'HorizontalAlignment','center','Color',[0.35 0.35 0.35]);
 
     hold(ax,'off');
 
-    %-------------------- nested helpers -----------------------------------
-    function s = safestr(x)
-        if isempty(x) || (isstring(x) && strlength(x)==0), s = '?'; else, s = char(string(x)); end
+    %---------------------- helpers (kept minimal) ---------------------------
+    function nm = safeName(S0)
+        if isfield(S0,'Name') && ~isempty(S0.Name), nm = S0.Name; else, nm = '?'; end
     end
-    function v = getfieldor(st, f, dv)
-        if isfield(st,f), v = st.(f); else, v = dv; end
+    function tf = isGrounded(T0, fld)
+        tf = isfield(T0,fld) && ~isempty(T0.(fld)) && any(strcmpi(T0.(fld), {'wye','auto'}));
     end
-    function val = safeTrans(A, ii, jj, tt)
-        try
-            val = A(ii,jj,tt);
-        catch
-            val = NaN;
+    function s = lowerOrQ(S0,fld)
+        if isfield(S0,fld) && ~isempty(S0.(fld)), s = lower(string(S0.(fld))); else, s = "?"; end
+    end
+    function x = getG(G0, ti, w, t)
+        x = NaN;
+        if isfield(G0,'Trans') ...
+           && size(G0.Trans,1) >= ti && size(G0.Trans,2) >= w && size(G0.Trans,3) >= t
+            x = G0.Trans(ti,w,t);
         end
     end
-    function s = sum_signed(v, signToward)
-        % signToward = +1 for incoming vals (toward node), −1 for outgoing vals (away)
-        v = v(:);
-        s = nansum(signToward * v);
+    function d = signToDown(Iw) % + means to ground → point down; − means from ground → up
+        if ~isfinite(Iw) || Iw==0, d = 0; elseif Iw>0, d = +1; else, d = -1; end;
     end
+    
 end
 
-% ======= local drawing utilities (file-local subfunctions) ================
-
+% ======= small drawing utilities =========================================
 function draw_transformer_symbol(ax, x, y, col)
-% Two-coil simplistic symbol centered at (x,y), size ~ 0.8 × 0.8
-    r = 0.15; dx = 0.22; n = 70;
-    th = linspace(pi*0.15, pi*1.85, n);
-    xc1 = x - dx; xc2 = x + dx;
-    plot(ax, xc1 + r*cos(th), y + r*sin(th), 'Color',col,'LineWidth',1.5);
-    plot(ax, xc2 + r*cos(th), y + r*sin(th), 'Color',col,'LineWidth',1.5);
-    % small terminals top/bottom
-    plot(ax, [xc1 xc1],[y+r y+r+0.25],'Color',col,'LineWidth',1);
-    plot(ax, [xc2 xc2],[y+r y+r+0.25],'Color',col,'LineWidth',1);
-    plot(ax, [xc1 xc1],[y-r y-r-0.25],'Color',col,'LineWidth',1);
-    plot(ax, [xc2 xc2],[y-r y-r-0.25],'Color',col,'LineWidth',1);
+% Two coils, centered (x,y), about 0.8×0.8
+    r = 0.18; dx = 0.22; th = linspace(pi*0.15, pi*1.85, 70);
+    plot(ax, x-dx + r*cos(th), y + r*sin(th), 'Color',col,'LineWidth',1.5);
+    plot(ax, x+dx + r*cos(th), y + r*sin(th), 'Color',col,'LineWidth',1.5);
 end
 
 function draw_ground(ax, x, y, col)
-% Simple ground symbol centered at (x,y)
-    plot(ax,[x x],[y y-0.15],'Color',col,'LineWidth',1.5);
+% Ground: three bars decreasing in width
     lw = 1.2;
+    plot(ax,[x x],[y y-0.16],'Color',col,'LineWidth',lw);
     plot(ax,[x-0.18 x+0.18],[y-0.18 y-0.18],'Color',col,'LineWidth',lw);
-    plot(ax,[x-0.12 x+0.12],[y-0.25 y-0.25],'Color',col,'LineWidth',lw);
-    plot(ax,[x-0.06 x+0.06],[y-0.32 y-0.32],'Color',col,'LineWidth',lw);
+    plot(ax,[x-0.12 x+0.12],[y-0.26 y-0.26],'Color',col,'LineWidth',lw);
+    plot(ax,[x-0.06 x+0.06],[y-0.34 y-0.34],'Color',col,'LineWidth',lw);
 end
 
 function draw_arrow(ax, x1, y1, x2, y2, col)
-% Draw a short line with a triangular arrowhead pointing from (x1,y1)->(x2,y2)
+% Short line with triangular head pointing (x1,y1)->(x2,y2)
     plot(ax,[x1 x2],[y1 y2],'Color',col,'LineWidth',2);
     v = [x2-x1, y2-y1]; L = hypot(v(1),v(2)); if L==0, return; end
-    v = v / L;
-    % Arrowhead dimensions in axis units
-    ah = 0.18; aw = 0.12;
-    % Build a small triangle at endpoint
-    n = [-v(2), v(1)]; % left normal
-    p3 = [x2, y2];
-    p1 = p3 - ah*v + aw*n;
-    p2 = p3 - ah*v - aw*n;
+    v = v/L; n = [-v(2), v(1)];
+    ah = 0.18; aw = 0.12;  % head length/width (axis units)
+    p3 = [x2 y2]; p1 = p3 - ah*v + aw*n; p2 = p3 - ah*v - aw*n;
     patch('Parent',ax,'XData',[p1(1) p3(1) p2(1)],'YData',[p1(2) p3(2) p2(2)], ...
           'FaceColor',col,'EdgeColor','none');
+end
+
+function draw_updown_arrow(ax, x, y, dir, col)
+% dir = +1 (down), -1 (up), 0 (invisible)
+    if dir==0, return; end
+    L = 0.22;
+    if dir>0
+        draw_arrow(ax, x, y, x, y- L, col);    % down
+    else
+        draw_arrow(ax, x, y- L, x, y, col);    % up
+    end
 end

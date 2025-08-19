@@ -5,23 +5,41 @@ function populateNetworkEditor(app, L, T, S)
 % =======================================================================
 
 %% --- Save State Internally ---
-app.L = L;
-app.T = T;
+% Sort Substations
+[~, sidx] = sort({S.Name});
+S = S(sidx);
+
+% Sort Transformers
+[~, tidx] = sort({T.Name});
+T = T(tidx);
+
+% Sort Lines
+[~, lidx] = sort({L.Name});
+L = L(lidx);
+
+% Assign sorted data to app
 app.S = S;
-app.OriginalL = L;
+app.T = T;
+app.L = L;
+
+% Store original (already sorted)
 app.OriginalT = T;
+app.OriginalL = L;
 
 app.LineEnabled = true(1, numel(L));
-app.TransEnabled = true(1, numel(T));
+app.TransEnabled = true(numel(T), 2);
+w1_enable = app.TransEnabled(:,1);    % HV_On → N×1
+w2_enable = app.TransEnabled(:,2);    % LV_On → N×1
 
 %% --- Update Transformer Table ---
 t_names = {T.Name}';
 sub = {T.Sub}';
 w1 = num2cell([T.W1]');
 w2 = num2cell([T.W2]');
-app.TransTable.Data = table(t_names, sub, w1, w2, app.TransEnabled', 'VariableNames', {'Name','Sub', 'W1', 'W2', 'Enabled'});
-app.TransTable.Data = sortrows(app.TransTable.Data, 'Name');
-
+Hv_Type = string({T.HV_Type}');
+Lv_Type = string({T.LV_Type}');
+app.TransTable.Data = table(t_names, sub, w1, Hv_Type, w1_enable, w2, Lv_Type, w2_enable', 'VariableNames', {'Name','Sub', 'W1', 'Type(H_V)', 'Enabled', 'W2', 'Type(L_V)', 'Enabled'});
+app.TransTable.ColumnSortable = true;
 
 %% --- Update Line Table ---
 % Extract relevant data from app.L
@@ -31,12 +49,8 @@ resist   = num2cell([app.L.Resistance]');
 enabled  = app.LineEnabled(:);  % Logical array tracking toggle state
 
 % Define LineTableData
-app.LineTable.Data = table(names, voltages, resist, enabled, ...
+app.LineTableData = table(names, voltages, resist, enabled, ...
     'VariableNames', {'Name', 'Voltage', 'Resistance', 'Enabled'});
-
-% Alphabetical sort 
-app.LineTable.Data = sortrows(app.LineTableData, 'Name');
-
 % Push to table UI
 app.LineTable.Data = app.LineTableData;
 %% --- Clear and Set Up Map ---
@@ -68,9 +82,9 @@ for k = 1:numel(L)
     lon = L(k).Loc(:,2);
     allLat = [allLat; lat];
     allLon = [allLon; lon];
-    color = 'b';
+    color = 'r';
     if isfield(L(k), 'Voltage') && L(k).Voltage >= 400
-        color = 'r';
+        color = 'b';
     end
     app.LinePlots(k) = plot(app.NetworkMapAxes, lon, lat, '-', 'Color', color, 'LineWidth', 1.5);
     app.LinePlots(k).ButtonDownFcn = @(src,~) toggleLine(app, k, ~app.LineEnabled(k));  % flip and pass it

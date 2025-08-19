@@ -1,6 +1,8 @@
-function create_gic_map_and_timeseries_tab(app, S, L, b, GIC, tind, timeInput)
+function create_gic_overview_tab(app, S, L, T,  b, GIC, tind, timeInput)
 % CREATE_GIC_MAP_AND_TIMESERIES_TAB - Adds a tab showing a map + GIC time series.
 % Supports toggling between Substations, Lines, and Transformers.
+% Substation Sciemeatic    - A breakdown into what are the inputs and
+% outputs in a substation.
 
     %% === Remove previous GIC tab if exists ===
     existingTabs = findall(app.TabGroup.Children, 'Type', 'uitab', 'Title', 'GIC Overview');
@@ -27,7 +29,7 @@ function create_gic_map_and_timeseries_tab(app, S, L, b, GIC, tind, timeInput)
 
     % Clamp tind to available range
     timeIndex = max(1, min(timeIndex, size(GIC.Subs, 2)));
-    
+
     %% === LEFT: geoaxes map ===
     mapAxes = geoaxes(grid);
     hold(mapAxes, 'on');
@@ -81,7 +83,7 @@ function create_gic_map_and_timeseries_tab(app, S, L, b, GIC, tind, timeInput)
 
     % === GIC Type Dropdown ===
     gicTypeDropdown = uidropdown(subGrid, ...
-        'Items', {'Substations', 'Lines', 'Transformers'}, ...
+        'Items', {'Substations', 'Lines', 'Transformers w1', 'Transformers w2'}, ...
         'Value', 'Substations', ...
         'Editable', 'off');
 
@@ -108,8 +110,10 @@ function create_gic_map_and_timeseries_tab(app, S, L, b, GIC, tind, timeInput)
                 names = {S.Name};
             case 'Lines'
                 names = {L.Name};
-            case 'Transformers'
-                names = {app.T.Name};
+            case 'Transformers w1'
+                names = {app.T.Name};           
+            case 'Transformers w2'
+                names = {app.T_w2.Name};
         end
         names = sort(names);
         entityDropdown.Items = names;
@@ -131,10 +135,15 @@ function create_gic_map_and_timeseries_tab(app, S, L, b, GIC, tind, timeInput)
                 idx = find(strcmp({L.Name}, name));
                 y1 = GIC.Lines(idx,:);
                 y2 = GIC.Original_Lines(idx,:);
-            case 'Transformers'
+            case 'Transformers w1'
                 idx = find(strcmp({app.T.Name}, name));
                 y1 = squeeze(GIC.Trans(idx,1,:))';
                 y2 = squeeze(GIC.Original_Trans(idx,1,:))';
+            case 'Transformers w2'
+                idx = find(strcmp({app.T.Name}, name));
+                y1 = squeeze(GIC.Trans(idx,1,:))';
+                y2 = squeeze(GIC.Original_Trans(idx,1,:))';
+            
         end
 
         plot(timeAxes, timeVec, y1, 'r-', 'LineWidth', 1.5, 'DisplayName', 'Edited');
@@ -152,22 +161,45 @@ function create_gic_map_and_timeseries_tab(app, S, L, b, GIC, tind, timeInput)
     delete(existingTabs);  % remove if exists
 
     tab = uitab(app.TabGroup, 'Title', 'Substation Schematic');
+  
+    % === Main Layout: Dropdown row and Scrollable plot area ===
     mainLayout = uigridlayout(tab, [2,1]);
     mainLayout.RowHeight = {'1x', '6x'};
-    topLayout = uigridlayout(mainLayout, [1,2]);
-    topLayout.ColumnWidth = {'10x', '1x'};
-    ax = uiaxes(mainLayout); hold(ax, 'on');
-    ax.XColor = 'none'; ax.YColor = 'none';
+    
+    % === Top layout for dropdown and button ===
+    topLayout = uigridlayout(mainLayout, [1,3]);
+    topLayout.Layout.Row = 1;
+    topLayout.ColumnWidth = {'1x','9x', '1x'};
+    
+    % === Scrollable panel for schematic ===
+    scrollPanel = uipanel(mainLayout);
+    scrollPanel.Scrollable = true;
+    scrollPanel.Layout.Row = 2;
+    
+    % === Axes for schematic inside scrollable panel ===
+    ax = uiaxes(scrollPanel);
+    ax.Position = [0 0 800 1500];  % Increase height if needed
+    ax.XColor = 'none';
+    ax.YColor = 'none';
     ax.Title.String = 'Substation Schematic';
 
-    subNames = string({S.Name});
+    
+    % === Schematic Display Options Dropdown ===
+    displayOptionsDropdown = uidropdown(topLayout, ...
+        'Items', {'Display schematic at max', 'Display schematic at chosen time'}, ...
+        'Value', 'Display schematic at max', ...
+        'Editable', 'off');
+    displayOptionsDropdown.Layout.Column = 1;
+
+
+    subNames = sort(string({S.Name}));  % Alphabetically sort the names
     dd = uidropdown(topLayout, 'Items', subNames);
-    dd.Layout.Column = 1;
+    dd.Layout.Column = 2;
     dd.Value = subNames(1);
 
     btn = uibutton(topLayout, 'Text', 'Draw');
-    btn.Layout.Column = 2;
-
-    btn.ButtonPushedFcn = @(~,~) draw_schematic(dd.Value, ax, L, T, GIC, timeIndex);
+    btn.Layout.Column = 3;
+    
+    btn.ButtonPushedFcn = @(~,~) draw_schematic(b, displayOptionsDropdown.Value, dd.Value, find(strcmpi({S.Name}, dd.Value)), ax, L, T, GIC, timeIndex);
 
 end

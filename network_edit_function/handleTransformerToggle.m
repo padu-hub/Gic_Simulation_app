@@ -1,64 +1,30 @@
 function handleTransformerToggle(app, event)
-    row = event.Indices(1);
-    col = event.Indices(2);
+    row = event.Indices(1);   % Transformer row index
+    col = event.Indices(2);   % Column index (determines W1 or W2)
+    enabled = event.NewData;  % New toggle state
 
-    data = app.TransTable.Data;
-    enabled = data{row, 'Enabled'};
-    bypass = data{row, 'Bypass'};
-
-    % === Column 5: Enable/Disable Transformer ===
-    if col == 5
-        app.TransEnabled(row) = enabled;
+    if col == 5  % HV_On column → W1
+        app.TransEnabled(row,1) = enabled;
         if ~enabled
-            app.T(row).W1 = inf;
-            app.T(row).W2 = inf;
+            app.T(row).W1 = NaN;
         else
-            % Apply bypass if checked
-            if bypass
-                if ismember(lower(app.T(row).HV_Type), {'wye', 'auto'})
-                    app.T(row).W1 = 1e9;
-                else
-                    app.T(row).W1 = app.OriginalT(row).W1;
-                end
-                if ismember(lower(app.T(row).LV_Type), {'wye', 'auto'})
-                    app.T(row).W2 = 1e9;
-                else
-                    app.T(row).W2 = app.OriginalT(row).W2;
-                end
-            else
-                app.T(row).W1 = app.OriginalT(row).W1;
-                app.T(row).W2 = app.OriginalT(row).W2;
-            end
+            app.T(row).W1 = app.OriginalT(row).W1;
         end
-
-    % === Column 6: Toggle Bypass Checkbox ===
-    elseif col == 6
-        if enabled
-            if bypass
-                if ismember(lower(app.T(row).HV_Type), {'wye','auto'})
-                    app.T(row).W1 = 1e9;
-                else
-                    app.T(row).W1 = app.OriginalT(row).W1;
-                end
-                if ismember(lower(app.T(row).LV_Type), {'wye','auto'})
-                    app.T(row).W2 = 1e9;
-                else
-                    app.T(row).W2 = app.OriginalT(row).W2;
-                end
-            else
-                app.T(row).W1 = app.OriginalT(row).W1;
-                app.T(row).W2 = app.OriginalT(row).W2;
-            end
+    elseif col == 8  % LV_On column → W2
+        app.TransEnabled(row,2) = enabled;
+        if ~enabled
+            app.T(row).W2 = NaN;
+        else
+            app.T(row).W2 = app.OriginalT(row).W2;
         end
     end
 
-    % === Update Color on Map ===
+    % Map marker color update (unchanged)
     if isvalid(app.TransPlots(row))
         if enabled
-            app.TransPlots(row).MarkerFaceColor = 'b';  % blue when active
+            app.TransPlots(row).MarkerFaceColor = 'b';
         else
-            app.TransPlots(row).MarkerFaceColor = 'w';  % white when disabled
+            app.TransPlots(row).MarkerFaceColor = 'w';
         end
     end
-
 end

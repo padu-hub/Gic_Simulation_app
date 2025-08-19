@@ -27,21 +27,21 @@ app.OriginalT = T;
 app.OriginalL = L;
 
 app.LineEnabled = true(1, numel(L));
-app.TransEnabled = true(1, numel(T));
+app.TransEnabled = true(numel(T), 2);
+w1_enable = app.TransEnabled(:,1);    % HV_On → N×1
+w2_enable = app.TransEnabled(:,2);    % LV_On → N×1
 
 %% --- Update Transformer Table ---
 t_names = {T.Name}';
 sub = {T.Sub}';
 w1 = num2cell([T.W1]');
 w2 = num2cell([T.W2]');
-enabled = app.TransEnabled';
-bypassFlag = false(numel(T), 1);  % initialize as false
-
-app.TransTable.Data = table(t_names, sub, w1, w2, enabled, bypassFlag, ...
-    'VariableNames', {'Name','Sub','W1','W2','Enabled','Bypass'});
-
-app.TransTable.ColumnName = {'Name','Sub','W1','W2','Enabled','DisconnectFromGround'};
-app.TransTable.ColumnEditable = [false, false, false, false, true, true];  % Only Enable + Bypass editable
+Hv_Type = string({T.HV_Type}');
+Lv_Type = string({T.LV_Type}');
+app.TransTable.Data = table( ...
+    t_names, sub, w1, Hv_Type, w1_enable, w2, Lv_Type, w2_enable, ...
+    'VariableNames', {'Name','Sub','W1','HV_Type','HV_On','W2','LV_Type','LV_On'});
+app.TransTable.ColumnSortable = true;
 
 %% --- Update Line Table ---
 % Extract relevant data from app.L
