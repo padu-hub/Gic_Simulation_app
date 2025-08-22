@@ -30,8 +30,6 @@ function draw_schematic(b, mode, subName, iSub, ax, L, T, GIC, specTime)
     end
     
     
-    
-    
     % Canvas
     cla(ax); hold(ax,'on'); axis(ax,[0 10 0 10]); axis(ax,'off'); daspect(ax,[1 1 1]);    
     
@@ -61,7 +59,7 @@ function draw_schematic(b, mode, subName, iSub, ax, L, T, GIC, specTime)
         isTo   = strcmpi(L(i).toSub,   subName);
         if ~(isFrom || isTo), continue; end
 
-        I = NaN;
+        I = 0;
         if isfield(GIC,'Lines') && size(GIC.Lines,1) >= i && size(GIC.Lines,2) >= timeIndex
             I = GIC.Lines(i,timeIndex);  % + means fromSub -> toSub
         end
@@ -148,17 +146,23 @@ function draw_schematic(b, mode, subName, iSub, ax, L, T, GIC, specTime)
     plot(ax,[5 5],[6.5 5.6],'k-','LineWidth',1.5);
     draw_ground(ax, 5, 5.35, cGrnd);
 
-    % Sum = Σ lines toward node (inSum) + Σ lines away (outSum) should balance Σ grounded windings
-    % But you asked to show *what's flowing to ground* at the sub: we take the grounded-winding sum.
-    text(ax, 5.2, 5.75, sprintf('To ground (sub): %.1f A', subGroundSum), ...
-         'Color',cGrnd,'HorizontalAlignment','left','FontWeight','bold');
+    % % Sum = Σ lines toward node (inSum) + Σ lines away (outSum) should balance Σ grounded windings
+    % % But you asked to show *what's flowing to ground* at the sub: we take the grounded-winding sum.
+    % text(ax, 5.2, 5.75, sprintf('To ground (sub): %.1f A', subGroundSum), ...
+    %      'Color',cGrnd,'HorizontalAlignment','left','FontWeight','bold');
+    % 
+    % % Optional quick balance check (can comment out)
+    % residual = (inSum + outSum) - subGroundSum; % should be ~0 if everything aligns
+    % text(ax, 5.0, 4.65, sprintf('KCL residual ≈ %.2f A', residual), ...
+    %      'HorizontalAlignment','center','Color',[0.35 0.35 0.35]);
 
-    % Optional quick balance check (can comment out)
-    residual = (inSum + outSum) - subGroundSum; % should be ~0 if everything aligns
-    text(ax, 5.0, 4.65, sprintf('KCL residual ≈ %.2f A', residual), ...
-         'HorizontalAlignment','center','Color',[0.35 0.35 0.35]);
-
+    
+    % Extract the value of GIC for the substation directly from GIC.Subs
+    subGIC = GIC.Subs(iSub, timeIndex); % Assuming tHere corresponds to the substation index
+    text(ax, 5.2, 5.50, sprintf('GIC (sub): %.1f A', subGIC), ...
+     'Color',cGrnd,'HorizontalAlignment','left','FontWeight','bold');
     hold(ax,'off');
+
 
     %---------------------- helpers (kept minimal) ---------------------------
     function nm = safeName(S0)
@@ -171,7 +175,7 @@ function draw_schematic(b, mode, subName, iSub, ax, L, T, GIC, specTime)
         if isfield(S0,fld) && ~isempty(S0.(fld)), s = lower(string(S0.(fld))); else, s = "?"; end
     end
     function x = getG(G0, ti, w, t)
-        x = NaN;
+        x = 0;
         if isfield(G0,'Trans') ...
            && size(G0.Trans,1) >= ti && size(G0.Trans,2) >= w && size(G0.Trans,3) >= t
             x = G0.Trans(ti,w,t);

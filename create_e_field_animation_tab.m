@@ -19,7 +19,6 @@ function create_e_field_animation_tab(app, b, ex, ey, lat, lon, L, S)
     % === Left: Map Axes ===
     ax = uiaxes(topLayout);
     hold(ax, 'on');
-    app.NetworkMapAxes = ax;
     
     % === Right: Scale Panel ===
     scalePanel = uigridlayout(topLayout, [3, 1]);  % vertical layout

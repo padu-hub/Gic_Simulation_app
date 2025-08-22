@@ -113,7 +113,7 @@ function create_gic_overview_tab(app, S, L, T,  b, GIC, tind, timeInput)
             case 'Transformers w1'
                 names = {app.T.Name};           
             case 'Transformers w2'
-                names = {app.T_w2.Name};
+                names = {app.T.Name};
         end
         names = sort(names);
         entityDropdown.Items = names;
@@ -141,8 +141,8 @@ function create_gic_overview_tab(app, S, L, T,  b, GIC, tind, timeInput)
                 y2 = squeeze(GIC.Original_Trans(idx,1,:))';
             case 'Transformers w2'
                 idx = find(strcmp({app.T.Name}, name));
-                y1 = squeeze(GIC.Trans(idx,1,:))';
-                y2 = squeeze(GIC.Original_Trans(idx,1,:))';
+                y1 = squeeze(GIC.Trans(idx,2,:))';
+                y2 = squeeze(GIC.Original_Trans(idx,2,:))';
             
         end
 

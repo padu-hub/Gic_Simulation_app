@@ -9,14 +9,19 @@ nLines = length(L);
 nSubs = length(S);
 nTrans = length(T);
 
+tic
 % === Voltage Calculation ===
 app.StatusTextArea.Value = [app.StatusTextArea.Value; '************************LINE VOLTAGES****************************'];
 drawnow;
 
 if ~uniform
-    V = calc_line_voltage(L, latq, lonq, ex(tind,:), ey(tind,:), 'natural');
+    if ~isequal(L, OriginalL) || ~isequal(T, OriginalT)
+        % === Perform calculations only if the , L, and T are different ===
+        V = calc_line_voltage(L, latq, lonq, ex(tind,:), ey(tind,:), 'natural');
+    end
+    
     V_original = calc_line_voltage(OriginalL, latq, lonq, ex(tind,:), ey(tind,:), 'natural');
-    nTimes = size(V,1);
+    nTimes = size(V_original,1);
 else
     nTimes = 1;
 end
@@ -26,10 +31,13 @@ app.StatusTextArea.Value = [app.StatusTextArea.Value; '********************LINE 
 app.StatusTextArea.Value = [app.StatusTextArea.Value; '********************NETWORK TOPOLOGY************************'];
 drawnow;
 
-[nodePairs, nodeRes, ~, edges, indices, neutralNodes, autoind, nBus] = get_nodePairs(L, T, S);
-[Yn, Ye] = calc_admittance_matrices(edges, indices, nodeRes, neutralNodes, S, nBus);
-indnull = find(diag(Yn) == 0);
-indnotnull = find(diag(Yn) ~= 0);
+if ~isequal(L, OriginalL) || ~isequal(T, OriginalT)
+        % === Perform calculations only if the  L, and T are different ===  
+        [nodePairs, nodeRes, ~, edges, indices, neutralNodes, autoind, nBus] = get_nodePairs(L, T, S);
+        [Yn, Ye] = calc_admittance_matrices(edges, indices, nodeRes, neutralNodes, S, nBus);
+        indnull = find(diag(Yn) == 0);
+        indnotnull = find(diag(Yn) ~= 0);
+end
 
 [nodePairs0, nodeRes0, ~, edges0, indices0, neutralNodes0, autoind0, nBus0] = get_nodePairs(OriginalL, OriginalT, S);
 [Yn0, Ye0] = calc_admittance_matrices(edges0, indices0, nodeRes0, neutralNodes0, S, nBus0);
@@ -44,13 +52,16 @@ GIC_Subs = zeros(nSubs, nTimes);
 GIC_Lines = zeros(nLines, nTimes);
 GIC_Trans = zeros(nTrans, 2, nTimes);
 
-% Check if original GICs already exist
-originalGICExists = isprop(app, 'GIC_Subs_Original') && ~isempty(app.GIC_Subs_Original);
-if originalGICExists
-    app.StatusTextArea.Value = [app.StatusTextArea.Value; 'Original GIC already exists. Skipping recalculation.'];
-    original_GIC_Subs = app.GIC_Subs_Original;
-    original_GIC_Lines = nan(length(OriginalL), nTimes);
-    original_GIC_Trans = nan(length(OriginalT), 2, nTimes);
+% Check if original GICs already exist for Subs, Lines, and Trans
+originalGICExists = isprop(app.GIC, 'Original_Subs') && ~isempty(app.GIC.Original_Subs);
+originalGICLinesExists = isprop(app.GIC, 'Original_Lines') && ~isempty(app.GIC.Original_Lines);
+originalGICTransExists = isprop(app.GIC, 'Original_Trans') && ~isempty(app.GIC.Original_Trans);
+
+if originalGICExists && originalGICLinesExists && originalGICTransExists
+    app.StatusTextArea.Value = [app.StatusTextArea.Value; 'Original GICs already exist. Skipping recalculation.'];
+    original_GIC_Subs = app.GIC.Original_Subs;
+    original_GIC_Lines = app.GIC.Original_Lines;
+    original_GIC_Trans = app.GIC.Original_Trans;
 else
     original_GIC_Subs = zeros(nSubs, nTimes);
     original_GIC_Lines = zeros(length(OriginalL), nTimes);
@@ -59,12 +70,15 @@ end
 
 milestones = [10, 25, 50, 70, 100];
 loggedPercents = false(size(milestones));
-tic
 
 for i = 1:nTimes
-    % === Edited Network ===
-    [GIC_Subs(:, i), GIC_Lines(:, i), GIC_Trans(:,:, i)] = ...
+    if ~isequal(L, OriginalL) || ~isequal(T, OriginalT)
+        % === Perform calculations only if the  L, and T are different ===
+        
+        % === Edited Network ===
+        [GIC_Subs(:, i), GIC_Lines(:, i), GIC_Trans(:,:, i)] = ...
         calc_gic(L, T, V(i,:), Yn, Ye, nodePairs, nodeRes, autoind, indices, edges, indnull, indnotnull, nBus);
+    end
 
     % === Original Network ===
     if ~originalGICExists
@@ -84,7 +98,12 @@ for i = 1:nTimes
         end
     end
 end
+
 toc
+
+elapsedTime = toc; % Get the elapsed time from the tic
+app.StatusTextArea.Value = [app.StatusTextArea.Value; sprintf('GIC calculating time: %.2f seconds', elapsedTime)];
+drawnow;
 
 % === Assign GICs to Network ===
 [maxSub, ~] = max(abs(GIC_Subs), [], 2);
