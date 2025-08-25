@@ -19,11 +19,10 @@ function create_e_field_animation_tab(app, b, ex, ey, lat, lon, L, S)
     % === Left: Map Axes ===
     ax = uiaxes(topLayout);
     hold(ax, 'on');
-    app.NetworkMapAxes = ax;
     
     % === Right: Scale Panel ===
     scalePanel = uigridlayout(topLayout, [3, 1]);  % vertical layout
-    scalePanel.RowHeight = {'6x', '3x', '1x'};
+    scalePanel.RowHeight = {'5x', '4x', '1x'};
     
     % --- Top: Scale Slider ---
     scaleSlider = uislider(scalePanel, ...
@@ -40,24 +39,24 @@ function create_e_field_animation_tab(app, b, ex, ey, lat, lon, L, S)
     arrowAxes.YColor = 'none';
     arrowAxes.XLim = [-1 1];
     arrowAxes.YLim = [0 1010];
-    axis(ax, 'equal');
-    disableDefaultInteractivity(app.UIAxe);
+    axis(arrowAxes, 'equal');
+    disableDefaultInteractivity(arrowAxes);
     
     % === Display Scale Representation ===
     textLabel = uilabel(scalePanel, ...
-        'Text', {'Arrow size','represents 1v/Km'}, ...
+        'Text', {'Arrow size','represents','1v/Km'}, ...
         'FontSize', 16, ...
         'FontWeight', 'bold', ...
         'HorizontalAlignment', 'center');
  
     %% === Bottom Controls ===
     ctrl = uigridlayout(mainLayout, [1, 4]);
-    ctrl.ColumnWidth = {'1x', '6x', '1x', '2x'};
+    ctrl.ColumnWidth = {'1x', '7x', '1x', '1x'};
     playBtn = uibutton(ctrl, 'Text', '▶️ Play');
     
     times = b(1).times;
     nSteps = length(times);
-    tickIndices = round(linspace(1, nSteps, 5));
+    tickIndices = round(linspace(1, nSteps, 16));
     
     tSlider = uislider(ctrl, ...
         'Limits', [1 nSteps], ...

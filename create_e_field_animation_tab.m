@@ -45,18 +45,18 @@ function create_e_field_animation_tab(app, b, ex, ey, lat, lon, L, S)
     % === Display Scale Representation ===
     textLabel = uilabel(scalePanel, ...
         'Text', {'Arrow size','represents','1v/Km'}, ...
-        'FontSize', 16, ...
+        'FontSize', 8, ...
         'FontWeight', 'bold', ...
         'HorizontalAlignment', 'center');
  
     %% === Bottom Controls ===
     ctrl = uigridlayout(mainLayout, [1, 4]);
-    ctrl.ColumnWidth = {'1x', '6x', '1x', '2x'};
+    ctrl.ColumnWidth = {'1x', '7x', '1x', '1x'};
     playBtn = uibutton(ctrl, 'Text', '▶️ Play');
     
     times = b(1).times;
     nSteps = length(times);
-    tickIndices = round(linspace(1, nSteps, 5));
+    tickIndices = round(linspace(1, nSteps, 16));
     
     tSlider = uislider(ctrl, ...
         'Limits', [1 nSteps], ...
@@ -115,6 +115,7 @@ function create_e_field_animation_tab(app, b, ex, ey, lat, lon, L, S)
     %% === Frame Update ===
     function updateFrame(idx)
         scale = scaleSlider.Value;
+        app.instanTime = idx;
         ex_t = ex(idx, :);
         ey_t = ey(idx, :);
         drawArrows(app, lon, lat, ex_t, ey_t, n, scale);
@@ -139,7 +140,6 @@ function create_e_field_animation_tab(app, b, ex, ey, lat, lon, L, S)
             isPlaying = false;
         else
             playBtn.Text = '▶️ Play';
-            app.instanTime = instanTime;
         end
     end
 
