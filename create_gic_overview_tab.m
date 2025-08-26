@@ -142,18 +142,26 @@ function create_gic_overview_tab(app, S, L, T,  b, GIC, tind, timeInput)
             case 'Transformers w2'
                 idx = find(strcmp({app.T.Name}, name));
                 y1 = squeeze(GIC.Trans(idx,2,:))';
-                y2 = squeeze(GIC.Original_Trans(idx,2,:))';
-            
+                y2 = squeeze(GIC.Original_Trans(idx,2,:))';            
         end
-
-        plot(timeAxes, timeVec, y1, 'r-', 'LineWidth', 1.5, 'DisplayName', 'Edited');
-        hold(timeAxes, 'on');
-        plot(timeAxes, timeVec, y2, 'b--', 'LineWidth', 1.5, 'DisplayName', 'Original');
-        hold(timeAxes, 'off');
-
-        title(timeAxes, sprintf('GIC @ %s (%s)', name, type));
-        legend(timeAxes, 'show', 'Location', 'best');
-        addGraphToStorage(app, timeAxes, sprintf('GIC @ %s (%s)', name, type));
+        
+        % Check if y1 and y2 have only one value
+        if numel(y1) == 1 && numel(y2) == 1
+            % Create a histogram-like plot for single values with different colors
+            bar(timeAxes, [1, 2], [y1, y2], 'FaceColor', 'flat');
+            b = timeAxes.Children; % Get the bar object
+            b.CData(1, :) = [1 0 0]; % Set color for edited (red)
+            b.CData(2, :) = [0 0 1]; % Set color for original (blue)
+            timeAxes.XTick = [1, 2];
+            timeAxes.XTickLabel = {'Edited', 'Original'};
+            ylim(timeAxes, 'auto');
+        else
+            % Regular plot for multiple values
+            plot(timeAxes, timeVec, y1, 'r-', 'LineWidth', 1.5, 'DisplayName', 'Edited');
+            hold(timeAxes, 'on');
+            plot(timeAxes, timeVec, y2, 'b--', 'LineWidth', 1.5, 'DisplayName', 'Original');
+            hold(timeAxes, 'off');
+        end
     end
 
     % === Create new App Tab ===
