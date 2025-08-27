@@ -18,15 +18,16 @@ function create_gic_overview_tab(app, S, L, T,  b, GIC, tind, timeInput)
     if ~isempty(tind)
         timeIndex = find(tind == timeInput, 1);
         if isempty(timeIndex)
-            warning('timeInput does not match any calculated GIC time range.');
+            warning('timeInput does not match any value in tind.');
             timeIndex = max(min(tind), min(timeInput, max(tind))); % Clamp timeIndex to the range [6, 100]
         end
     else
-        warning('GIC not calculated.');
+        warning('tind is empty. Cannot find position.');
+        timeIndex = 6; % Default to 6 if tind is empty
     end
 
     %% === Time Vector ===
-    timeVec = b(1).times(tind);
+    timeVec = b(1).times(timeInput);
     
     %% === LEFT: geoaxes map ===
     mapAxes = geoaxes(grid);
@@ -159,11 +160,7 @@ function create_gic_overview_tab(app, S, L, T,  b, GIC, tind, timeInput)
             hold(timeAxes, 'on');
             plot(timeAxes, timeVec, y2, 'b--', 'LineWidth', 1.5, 'DisplayName', 'Original');
             hold(timeAxes, 'off');
-            % Add legend to the time series plot
-            legend(timeAxes, {'Edited', 'Original'}, 'Location', 'northeast');
-            
         end
-        addGraphToStorage(app, timeAxes, sprintf('GIC @ %s (%s)', name, type));
     end
 
     % === Create new App Tab ===
@@ -210,6 +207,6 @@ function create_gic_overview_tab(app, S, L, T,  b, GIC, tind, timeInput)
     btn = uibutton(topLayout, 'Text', 'Draw');
     btn.Layout.Column = 3;
     
-    btn.ButtonPushedFcn = @(~,~) draw_schematic(b, displayOptionsDropdown.Value, dd.Value, find(strcmpi({S.Name}, dd.Value)), ax, L, T, GIC, timeIndex, timeVec);
+    btn.ButtonPushedFcn = @(~,~) draw_schematic(b, displayOptionsDropdown.Value, dd.Value, find(strcmpi({S.Name}, dd.Value)), ax, L, T, GIC, timeInput);
 
 end

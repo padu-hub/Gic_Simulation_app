@@ -52,7 +52,7 @@ function create_e_field_animation_tab(app, b, ex, ey, lat, lon, L, S)
     %% === Bottom Controls ===
     ctrl = uigridlayout(mainLayout, [1, 4]);
     ctrl.ColumnWidth = {'1x', '7x', '1x', '1x'};
-    playBtn = uibutton(ctrl, 'Text', '▶️ Play');
+    timeLbl = uilabel(ctrl, 'Text', '', 'HorizontalAlignment', 'right', 'FontSize', 16);
     
     times = b(1).times;
     nSteps = length(times);
@@ -68,8 +68,8 @@ function create_e_field_animation_tab(app, b, ex, ey, lat, lon, L, S)
         'Items', {'1x', '2x', '5x', '10x', '20x', '50x'}, ...
         'ItemsData', [1 2 5 10 20 50], ...
         'Value', 10);
+    playBtn = uibutton(ctrl, 'Text', '▶️ Play');
     
-    timeLbl = uilabel(ctrl, 'Text', '', 'HorizontalAlignment', 'right', 'FontSize', 16);
     
     %% === Map Base Drawing ===
     provinces = shaperead('province.shp', 'UseGeoCoords', true);

@@ -1,4 +1,4 @@
-function draw_schematic(b, mode, subName, iSub, ax, L, T, GIC, specTimeIndex, timeVec)
+function draw_schematic(b, mode, subName, iSub, ax, L, T, GIC, specTimeIndex, timeVex)
 %DRAW_SCHEMATIC  One-page substation view: lines in/out, xfmrs, and ground flow.
 % Sign rule used here: for wye/auto windings, +GIC => to ground.
 %
@@ -32,8 +32,8 @@ function draw_schematic(b, mode, subName, iSub, ax, L, T, GIC, specTimeIndex, ti
     % Canvas
     cla(ax); hold(ax,'on'); axis(ax,[0 10 0 10]); axis(ax,'off'); daspect(ax,[1 1 1]);    
     
-    % Time label    
-    timeLbl = sprintf('Time: %s', datestr(timeVec(specTimeIndex), 'yyyy-mmm-dd HH:MM:SS'));
+    % Time label
+    timeLbl = sprintf('Time: %s', datestr(b(1).times(timeIndex), 'yyyy-mmm-dd HH:MM:SS'));
     title(ax, sprintf('GIC Schematic — %s\n%s', subName, timeLbl), 'FontWeight','bold');
 
     % Center bus
