@@ -77,6 +77,7 @@ for i = 1:nTimes
         GIC_Subs(:, i) = NaN;
         GIC_Lines(:, i) = NaN;
         GIC_Trans(:,:, i) = NaN;
+    end        
     end
 
     % --- Progress Indicator ---

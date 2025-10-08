@@ -119,7 +119,7 @@ function create_e_field_animation_tab(app, b, ex, ey, lat, lon, L, S)
         ex_t = ex(idx, :);
         ey_t = ey(idx, :);
         drawArrows(app, lon, lat, ex_t, ey_t, n, scale);
-        timeLbl.Text = datestr(b(1).times(idx), 'yyyy-mmm-dd HH:MM:SS');
+        timeLbl.Text = datestr(b(1).times(idx), 'HH:MM:SS yyyy-mmm-dd');
     end
 
     %% === Playback Logic ===

@@ -1,0 +1,6 @@
+function [S1,L1,T1,G1] = runGIC_now(app)
+    % One-shot GIC run using current app.L/app.T and existing app.* inputs
+    [S1, L1, T1, G1, ~, ~, ~, ~] = calc_gic_main( ...
+        app, app.S, app.L, app.T, app.ex, app.ey, app.latq, app.lonq, ...
+        app.tind, app.uniform, app.OriginalL, app.OriginalT);
+end

@@ -107,6 +107,13 @@ function plot_gic_mag_map(app, S, L, tind, b, GIC, timeInput, mode)
             cb.Label.String = 'GIC (A)';
             colormap jet;
 
+            
+            % === Plot Substation Names ===
+            % for i = 1:numel(S)
+            %     textm(subLat(i), subLon(i), S(i).Name, 'FontSize', 5, ...
+            %         'VerticalAlignment', 'bottom', 'Color', 'red', 'FontWeight', 'bold');
+            % end
+
             % === Magnetic Field Vectors ===
             % refScale = 500;
             % for k = 1:numel(b)
