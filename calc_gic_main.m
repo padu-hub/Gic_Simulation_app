@@ -1,6 +1,6 @@
 function [S, L, T, GIC, subLoc, nLines, nSubs, nTrans] = calc_gic_main(app, S, L, T, ex, ey, latq, lonq, tind, uniform, OriginalL, OriginalT)
 % =======================================================================
-% CALC_GIC_MAIN (Optimized)
+% CALC_GIC_MAIN
 % Computes GIC for edited and original networks
 % Skips edited GIC if network hasn't changed
 % =======================================================================

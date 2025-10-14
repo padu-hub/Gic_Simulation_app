@@ -158,6 +158,7 @@ function create_gic_overview_tab(app, S, L, T,  b, GIC, tind, timeInput)
             plot(timeAxes, timeVec, y1, 'r-', 'LineWidth', 1.5, 'DisplayName', 'Edited');
             hold(timeAxes, 'on');
             plot(timeAxes, timeVec, y2, 'b--', 'LineWidth', 1.5, 'DisplayName', 'Original');
+            title(timeAxes, sprintf('GIC Time Series for %s (%s)', name, type));
             hold(timeAxes, 'off');
             % Add legend to the time series plot
             legend(timeAxes, {'Edited', 'Original'}, 'Location', 'northeast');

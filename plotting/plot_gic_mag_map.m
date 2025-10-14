@@ -74,18 +74,24 @@ function plot_gic_mag_map(app, S, L, tind, b, GIC, timeInput, mode)
                 end
                 plotm(lat, lon, '-', 'Color', tcolor, 'LineWidth', 1.5);
             end
-
+            
+            % === Determine Current Data Based on GIC Values ===
+            if any(isnan(GIC.Subs), 'all')
+                currentData = GIC.Original_Subs;
+            else
+                currentData = GIC.Subs;
+            end
             % === GIC Bubble Mode Selector ===
             switch mode
                 case 'Max GIC'
-                    [~, idxMax] = max(abs(GIC.Subs), [], 2);
-                    gicVals = arrayfun(@(i) GIC.Subs(i, idxMax(i)), 1:size(GIC.Subs,1))';
+                    [~, idxMax] = max(abs(currentData), [], 2);
+                    gicVals = arrayfun(@(i) currentData(i, idxMax(i)), 1:size(currentData,1))';
                     cVals = gicVals;
                     titleStr = 'Max GIC Magnitude (All Time)';
 
                 case 'GIC Change'
                     % Compute difference over time
-                    gicDiff = abs(GIC.Subs) - abs(GIC.Original_Subs);                
+                    gicDiff = abs(currentData) - abs(GIC.Original_Subs);                
                     % Find index of max absolute change for each substation
                     [~, idxMaxDiff] = max(abs(gicDiff), [], 2);                
                     % Extract signed change at that peak difference time
@@ -94,11 +100,12 @@ function plot_gic_mag_map(app, S, L, tind, b, GIC, timeInput, mode)
                     titleStr = 'Max GIC Change (Edited - Original)';
 
                 case 'Snapshot'
-                    gicVals = GIC.Subs(:, timeIndex);
+                    gicVals = currentData(:, timeIndex);
                     cVals = gicVals;
                     peakTime = b(1).times(tind(timeIndex));
                     titleStr = ['GIC Map Snapshot @ ', char(peakTime)];
             end
+
 
             % === Plot Substation GIC as bubbles ===
             scatterm(subLat, subLon, 30 + 30*abs(gicVals), cVals, ...
