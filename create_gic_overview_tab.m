@@ -163,6 +163,13 @@ function create_gic_overview_tab(app, S, L, T,  b, GIC, tind, timeInput)
             % Add legend to the time series plot
             legend(timeAxes, {'Edited', 'Original'}, 'Location', 'northeast');
             
+            % Make graph font more visible and the header bold
+            timeAxes.FontSize = 12; % Increase font size for axes
+            timeAxes.Title.FontSize = 14; % Increase font size for title
+            timeAxes.Title.FontWeight = 'bold'; % Make title bold
+            timeAxes.XLabel.FontSize = 12; % Increase font size for x-axis label
+            timeAxes.YLabel.FontSize = 12; % Increase font size for y-axis label
+                    
         end
         addGraphToStorage(app, timeAxes, sprintf('GIC @ %s (%s)', name, type));
     end

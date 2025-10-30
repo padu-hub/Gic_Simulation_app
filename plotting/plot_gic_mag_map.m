@@ -44,9 +44,10 @@ function plot_gic_mag_map(app, S, L, tind, b, GIC, timeInput, mode)
             % === Map Limits ===
             latLim = [min(subLat), max(subLat)];
             lonLim = [min(subLon), max(subLon)];
-            latPad = 0.7 * diff(latLim); lonPad = 0.7 * diff(lonLim);
+            latPad = 0.2 * diff(latLim); lonPad = 0.3 * diff(lonLim);
             latLim = latLim + [-latPad latPad];
             lonLim = lonLim + [-lonPad lonPad];
+            
 
             % === Initialize Map ===
             figure;

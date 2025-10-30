@@ -37,100 +37,55 @@ end
 
 % === Start loading magnetic files ===
 tic
-siteNames = {''};
-count = 0;
-for i = length(magfile):-1:1
-    fname = magfile{i};
-    try
-        [~, baseName, ~] = fileparts(fname);  % Get filename without path or extension
-        % === NRCan .sec files (3-letter site code at the end) ===
-        if endsWith(fname, '.sec', 'IgnoreCase', true)
-            if length(baseName) >= 3
-                siteCode = baseName(end-2:end);  % Last 3 chars
-            else
-                warning("Filename too short to extract site code: %s", baseName);
-                continue;
-            end
-    
-            if ~any(strcmpi(siteNames, siteCode))
-                sample_rate = 1;  % 1 Hz
-                siteData = load_IAGA_site(siteCode, {fname}, sample_rate);
-                if isstruct(siteData)
-                    count = count + 1;
-                    b(count) = siteData;
-                    siteNames{end+1} = siteCode;
-                end
-            end
-    
-        % === CARISMA .F01 (4-letter site code at the end) ===
-        elseif endsWith(fname, '.F01', 'IgnoreCase', true)
-            if length(baseName) >= 4
-                siteCode = baseName(end-3:end);
-            else
-                warning("Filename too short to extract site code: %s", baseName);
-                continue;
-            end
-    
-            if ~any(strcmpi(siteNames, siteCode))
-                siteData = load_CARISMA_site(siteCode, {fname});
-                if isstruct(siteData)
-                    count = count + 1;
-                    b(count) = siteData;
-                    siteNames{end+1} = siteCode;
-                end
-            end
-    
-        % === IAGA .min files (3-letter site code at the end) ===
-        elseif endsWith(fname, '.min', 'IgnoreCase', true)
-            if length(baseName) >= 3
-                siteCode = baseName(end-2:end);
-            else
-                warning("Filename too short to extract site code: %s", baseName);
-                continue;
-            end
-    
-            if ~any(strcmpi(siteNames, siteCode))
-                sample_rate = 1/60;  % 1 sample per minute
-                siteData = load_IAGA_site(siteCode, {fname}, sample_rate);
-                if isstruct(siteData)
-                    count = count + 1;
-                    b(count) = siteData;
-                    siteNames{end+1} = siteCode;
-                end
-            end
-    
-        % === CANOPUS .MAG (4-letter site code at the end) ===
-        elseif endsWith(fname, '.MAG', 'IgnoreCase', true)
-            if length(baseName) >= 4
-                siteCode = baseName(end-3:end);
-            else
-                warning("Filename too short to extract site code: %s", baseName);
-                continue;
-            end
-    
-            if ~any(strcmpi(siteNames, siteCode))
-                siteData = load_CANOPUS_site_MAG(siteCode, {fname});
-                if isstruct(siteData)
-                    count = count + 1;
-                    b(count) = siteData;
-                    siteNames{end+1} = siteCode;
-                end
-            end
-    
-        else
-            disp(['Skipped unsupported file: ', fname]);
-        end
-    
-    catch ME
-        warning('Failed to load %s:\n%s', fname, getReport(ME, 'basic'));
+% --- Group all files by site code first ---
+group = {};
+type = {};
+for i = 1:length(magfile)
+    [~, name, ext] = fileparts(magfile{i});
+    ext = lower(ext);
+    switch ext
+        case '.sec'
+            siteCode = upper(name(1:3));
+        case '.f01'
+            siteCode = upper(name(9:12));
+        case '.min'
+            siteCode = upper(name(1:3));
+        case '.mag'
+            siteCode = upper(name(9:12));
+        otherwise
+            continue
     end
 
-    
-    
+    if ~isfield(group, siteCode)
+        group.(siteCode) = {};
+        type.(siteCode) = ext;
+    end
+    group.(siteCode){end+1} = magfile{i};
 end
- 
 
-%ns = length(b); %Number of Mag sites loaded
+
+% --- Then load each site once, with all its files ---
+count = 0;
+siteNames = fieldnames(group);
+
+for s = 1:numel(siteNames)
+    sc = siteNames{s};
+    files = group.(sc);
+    ext = type.(sc);
+
+    switch ext
+        case '.sec'
+            sample_rate = 1;
+            b(s) = load_IAGA_site(sc, files, sample_rate);
+        case '.f01'
+            b(s) = load_CARISMA_site(sc, files);
+        case '.min'
+            sample_rate = 1/60;
+            b(s) = load_IAGA_site(sc, files, sample_rate);
+        case '.mag'
+            b(s) = load_CANOPUS_site_MAG(sc, files);
+    end
+end
 toc
 
 %Delete duplicates
