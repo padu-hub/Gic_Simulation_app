@@ -1,0 +1,31 @@
+function pct = pctChange_safe(origMax, editMax, tol, capInf)
+    if nargin < 3 || isempty(tol),    tol = 1e-9; end
+    if nargin < 4,                    capInf = []; end
+
+    % init as NaN and fill by masks
+    pct = NaN(size(origMax));
+
+    % Case 1: normal percent change
+    m1 = abs(origMax) > tol;
+    % Case 2: 0 -> 0  => 0%
+    m2 = ~m1 & (abs(editMax) <= tol);
+    % Case 3: 0 -> nonzero  => Inf (or cap / NaN if you prefer)
+    m3 = ~m1 & (abs(editMax) > tol);
+
+    if any(m1) % normal percent change
+        x = 100 * (editMax - origMax) ./ origMax;
+        pct = abs(x);
+    end
+
+    if any(m2) % 0 -> 0  => 0%
+        pct = 0;
+    end
+
+    if any(m3) % 0 -> nonzero  => Inf (or cap / NaN if you prefer)
+        if isempty(capInf)
+            pct = Inf;
+        else
+            pct = capInf;   
+        end
+    end
+end

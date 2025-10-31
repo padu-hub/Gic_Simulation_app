@@ -1,4 +1,4 @@
-function UpdateSpreadsheetButtonPushed(app)
+function UpdateSpreadsheet(app)
 % Runs whichever boxes are ticked, appends to app.MitigationResults,
 % pushes to your Spreadsheet Results table, and flips the lamp green.
 
@@ -7,17 +7,19 @@ try
 
     % Baseline once for current window reference
     resetAllNetwork(app);
-    tidx  = app.tind;
-    [Sbase, ~, Tbase, ~] = runGIC_now(app);
+    [~, ~, ~, GICbase] = runGIC_now(app);
+    gic_originalS
+    gic_originalL
+    gic_originalT
 
     Tadd = table();
 
     if app.ApplyNBtoeachautotransformersIndividuallyCheckBox.Value
-        Tadd = [Tadd; batch_applyNeutralBlockers(app, Sbase, Tbase, tidx)];
+        Tadd = [Tadd; batch_applyNeutralBlockers(app, GICbase)];
     end
 
     if app.TurnoffHighvoltagelinesindividuallyCheckBox.Value
-        Tadd = [Tadd; batch_turnOff500kVLines(app, Sbase, Tbase, tidx)];
+        Tadd = [Tadd; batch_turnOff500kVLines(app, GICbase)];
     end
 
     % Merge into app table

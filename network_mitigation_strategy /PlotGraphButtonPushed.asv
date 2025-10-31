@@ -30,6 +30,10 @@ try
 
     % External figure
     fig = figure('Name','Mitigation Heatmap','Color','w');
+    
+    % Set the color of the heatmap cells to black
+    h.CellLabelColor = 'none'; % Hide cell labels for better visibility
+    h.ColorData = zeros(size(Z)); % Set all cell colors to black    
     h = heatmap(fig, sims, entities, Z);
     h.Title   = 'Average Δ|GIC| (A)  — filtered';
     h.Title = {h.Title; 'blue (improve, negative) → white → red (worse, positive)'};
