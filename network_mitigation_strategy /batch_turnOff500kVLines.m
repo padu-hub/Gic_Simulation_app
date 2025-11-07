@@ -25,12 +25,6 @@ function Tadd = batch_turnOff500kVLines(app, GICbase)
     meanAbs   = @(x) mean(abs(x), 'all', 'omitnan');    % avg |.| over full window
     maxAbs    = @(x)  max(abs(x), [], 'all', 'omitnan');% max |.| over full window
 
-    % ---------- init row container as struct array (avoids double→struct error) ----------
-    rows = struct('SimID',{},'ActionType',{},'TargetName',{},'TargetID',{}, ...
-                  'Level',{},'EntityName',{},'EntityID',{}, ...
-                  'AvgAbs_Orig_A',{},'AvgAbs_Edit_A',{},'AvgDeltaAbs_A',{}, ...
-                  'MaxPctChange',{});
-
     % Next simulation index for heatmap X-axis
     simID = height(app.MitigationResults) + 1;
 
@@ -38,9 +32,12 @@ function Tadd = batch_turnOff500kVLines(app, GICbase)
     is500  = arrayfun(@(x) isfield(x,'Voltage') && x.Voltage == 500, app.L);
     idx500 = find(is500);
 
+    
+    rows = struct('SimID', {}, 'ActionType', "", 'TargetName', "", 'TargetID', {}, 'Level', "", ... 
+             'EntityName', "", 'EntityID', {}, 'GIC_Orig_A', {}, 'GIC_Edit_A', {}, ...
+             'DeltaAbs_A', {}, 'PctChange_max', {}, 'MaxAbsChange', {})
     nSubs = size(GICbase.Subs, 1);
-
-
+    
     for i = idx500(:).'  % each line = one scenario
         % -- 1) Reset to pristine network for an isolated what-if
         resetAllNetwork(app);  % must restore app.L/app.T from app.OriginalL/app.OriginalT
@@ -59,17 +56,20 @@ function Tadd = batch_turnOff500kVLines(app, GICbase)
             g1_sub_avg = meanAbs(GIC.Subs(  sid, :));
             g0_sub_max =  maxAbs(GIC.Original_Subs(sid, :));
             g1_sub_max =  maxAbs(GIC.Subs(  sid, :));
+            
+            % Calculate the absolute maximum change in GIC between edited and original
+            diffRow             = GIC.Subs(sid, :) - GIC.Original_Subs(sid, :);
+            absChange           = abs(diffRow);
+            [maxAbsChange, k]   = max(absChange);
+            maxAbsChange        = sign(diffRow(k)) * maxAbsChange;
 
             % % change of the max |GIC| with protected zero handling
             pctMax = pctChange_safe(g0_sub_max, g1_sub_max, 1e-9, 100);
-
-            % Z value for heatmap = average Δ|GIC| (A) over the full window
-            dAvg   = g1_sub_avg - g0_sub_avg;
-
+            
             % Append row (uses your existing makeRowNB factory)
-            rows(end+1) = makeRowNB(simID, 'LINE_OFF_500kV', app.L(i).Name, i, ... 
+            rows(end+1) = makeRow( simID, 'LINE_OFF_500kV', app.L(i).Name, i, ... 
                                      'substation', app.S(sid).Name, sid, ...
-                                     g0_sub_avg, g1_sub_avg, dAvg, pctMax);
+                                     g0_sub_avg, g1_sub_avg, maxAbsChange, pctMax);
         end
 
         % -- 5) Next scenario column

@@ -10,21 +10,24 @@ try
     T = app.MitigationResults;
     if isempty(T), app.PlotLamp.Color=[0.8 0 0]; return; end
 
-    pctThr = app.ThresholdPctEdit.Value;   % e.g., 30
-    absThr = app.AbsThresholdAEdit.Value;  % e.g., 3
+    pctThr = app.ThresholdPctEdit.Value;   % originally: 30
+    absThr = app.AbsThresholdAEdit.Value;  % originally: 3
 
-    keep = abs(T.AvgDeltaAbs_A) >= absThr & (T.MaxPctChange >= pctThr);
+    % ----------------------------------------
+    % Plotting of Average Change in GIC heatmaps
+    % ----------------------------------------
+    keep = abs(T.DeltaAbs_A) >= absThr & (T.PctChange_max >= pctThr);
     T2 = T(keep, :);
     if isempty(T2), figure; text(0.1,0.5,'No entries pass thresholds'); axis off; app.PlotLamp.Color=[0 0.7 0]; return; end
 
     entities = unique(T2.EntityName, 'stable');
-    sims     = unique(T2.TargetName, 'stable');
+    sims     = unique(T2.TargetName, 'stable');    
+    
     Z = nan(numel(entities), numel(sims));
-
     for r = 1:numel(entities)
         for c = 1:numel(sims)
             mask = (T2.EntityName==entities(r)) & (T2.TargetName==sims(c));
-            Z(r,c) = mean(T2.AvgDeltaAbs_A(mask), 'omitnan');  % average Δ over any duplicate rows
+            Z(r,c) = mean(T2.DeltaAbs_A(mask), 'omitnan');  % average Δ over any duplicate rows
         end
     end
 
@@ -40,8 +43,42 @@ try
     if isempty(clim) || isnan(clim), clim=1; end
     h.ColorLimits = [-clim clim];
     h.Colormap = bluewhitered();
+    
+        
+    % ----------------------------------------
+    % Plotting of MaxAbsChange heatmaps
+    % ----------------------------------------
+    
+    keep = abs(T.MaxAbsChange) >= absThr & (T.PctChange_max >= pctThr);
+    T3 = T(keep, :);
+    if isempty(T3), figure; text(0.1,0.5,'No entries pass thresholds'); axis off; app.PlotLamp.Color=[0 0.7 0]; return; end
 
+    entities = unique(T3.EntityName, 'stable');
+    sims     = unique(T3.TargetName, 'stable'); 
+    
+    % Calculate Z for MaxAbsChange
+    Z_max = nan(numel(entities), numel(sims));
+
+    for r = 1:numel(entities)
+        for c = 1:numel(sims)
+            mask = (T3.EntityName==entities(r)) & (T3.TargetName==sims(c));
+            Z_max(r,c) = max(T3.MaxAbsChange(mask), [], 'omitnan');  % maximum absolute change over any duplicate rows
+        end
+    end
+    % External figure for MaxAbsChange
+    fig2 = figure('Name','Max Absolute Change Heatmap','Color','w');
+    h2 = heatmap(fig2, sims, entities, Z_max);
+    h2.Title   = 'Max Absolute Change  — filtered';
+    h2.Title = {h2.Title; 'blue (improve, negative) → white → red (worse, positive)'};
+    h2.XLabel  = 'Change index (SimID)';
+    h2.YLabel  = 'Entity';
+    % Diverging colormap: blue (improve, negative) → white → red (worse, positive)
+    clim_max = max(abs(Z_max),[],'all','omitnan'); 
+    if isempty(clim_max) || isnan(clim_max), clim_max=1; end
+    h2.ColorLimits = [-clim_max clim_max];
+    h2.Colormap = bluewhitered();
     app.PlotLamp.Color = [0 0.7 0]; % green
+
 catch ME
     app.PlotLamp.Color = [0.8 0 0]; % red
     rethrow(ME)

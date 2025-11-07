@@ -1,70 +1,127 @@
-function Tadd = batch_applyNeutralBlockers(app, GICbase, tidx)
+function Tadd = batch_applyNeutralBlockers(app, GICbase)
 % BATCH_APPLYNEUTRALBLOCKERS
 % ----------------------------------------------------------
 % For each AUTO transformer:
-%   - Reset network to OriginalL/OriginalT
-%   - Apply NB by setting THIS transformer's W2 = NaN
-%   - Run GIC (GIC1)
-%   - Record two rows:
-%       (1) transformer-level (neutral = W2)
-%       (2) substation-level (from GIC.Subs)
-% Z metric: Avg Δ|GIC| over tidx  (edit - orig)
-% Filter metric stored: % change of max |GIC| over tidx
+%   1) Reset to OriginalL/OriginalT (isolated trial).
+%   2) Apply neutral blocker by opening the W2 DC path (set W2 = NaN) for THIS xfmr.
+%   3) Run GIC → get edited GIC struct (with both current and original fields).
+%   4) Append rows per SUBSTATION (like HV code)  AND  per TRANSFORMER W1 (new).
+%      Metrics over the full simulation:
+%         - GIC_Orig_A, GIC_Edit_A: avg |GIC| (baseline vs edited)
+%         - PctChange_max         : safe % change of max |GIC| (cap 100%)
+%         - MaxAbsChange          : signed maximum absolute Δ at any time
+%         - Z_forHeatmap_A        : set to MaxAbsChange (to match your HV plotter)
+%   5) Return a table with all rows to append to app.MitigationResults.
 % ----------------------------------------------------------
 
-    % --- small helpers (vector/time-window safe)
-    meanAbs  = @(x) mean(abs(x), 'all', 'omitnan');        % avg |.| over tidx
-    maxAbs   = @(x)  max(abs(x), [], 'all', 'omitnan');    % max |.| over tidx
-    pctChange = @(origMax,editMax) (origMax>0) .* (100*(editMax-origMax)./origMax) + ...
-                                    (origMax==0).*NaN;
+    tic
 
-    rows  = [];                                 
-    simID = height(app.MitigationResults) + 1;   
+    % ---------- small numeric helpers (same as HV) ----------
+    meanAbs = @(x) mean(abs(x), 'all', 'omitnan');     % avg |.| over full window
+    maxAbs  = @(x)  max(abs(x), [], 'all', 'omitnan'); % max |.| over full window
 
-    % --- find AUTO transformers by type flags
-    isAuto = arrayfun(@(t) strcmpi(t.HV_Type,'auto') || strcmpi(t.LV_Type,'auto'), app.T);
-    autoIdx = find(isAuto);
+    % ---------- next SimID (heatmap X) ----------
+    simID = height(app.MitigationResults) + 1;
 
-    for k = autoIdx(:).'
-        % ===== 1) Reset network, apply NB to THIS transformer only =====
-        resetAllNetwork(app);            
-        app.T(k).W2 = NaN;                
+    % ---------- identify AUTO transformers ----------
+    isAuto  = arrayfun(@(t) strcmpi(t.HV_Type,'auto') || strcmpi(t.LV_Type,'auto'), app.T);
+    idxAuto = find(isAuto);
 
-        % ===== 2) Run edited network =====
-        [~, ~, ~, GIC1] = runGIC_now(app);
+    % ---------- rows container (mirror your HV row schema) ----------
+    rows = struct('SimID', {}, 'ActionType', "", 'TargetName', "", 'TargetID', {}, ...
+                  'Level', "", 'EntityName', "", 'EntityID', {}, ...
+                  'GIC_Orig_A', {}, 'GIC_Edit_A', {}, ...
+                  'DeltaAbs_A', {}, 'PctChange_max', {}, ...
+                  'MaxAbsChange', {});
+    nSubs = size(GICbase.Subs, 1);
 
-        % ===== 3) Transformer-level metrics (use W2 channel = 2) =====
-        % GICbase.Trans / GIC1.Trans have shape: [nTrans x 2 x nTime]
-        g0_tr_avg = meanAbs( squeeze(GICbase.Trans(k, 2, tidx)) );  
-        g1_tr_avg = meanAbs( squeeze(GIC1.   Trans(k, 2, tidx)) );  
-        g0_tr_max =  maxAbs( squeeze(GICbase.Trans(k, 2, tidx)) ); 
-        g1_tr_max =  maxAbs( squeeze(GIC1.   Trans(k, 2, tidx)) );  
+    % ================================================================
+    % ============ LOOP: one scenario per AUTO transformer ============
+    % ================================================================
+    for k = idxAuto(:).'
 
-        pctMax_tr = pctChange(g0_tr_max, g1_tr_max);        % %Δ of max |GIC|
-        dAvg_tr   = g1_tr_avg - g0_tr_avg;                  % Avg Δ|GIC| (A)
+        % -- 1) Reset to pristine network (no cumulative edits)
+        resetAllNetwork(app);
 
-        rows(end+1) = makeRowNB(simID, 'NB_W2_OFF', app.T(k).Name, k, ...   
-                                'transformer', app.T(k).Name, k, ...
-                                g0_tr_avg, g1_tr_avg, dAvg_tr, pctMax_tr);
+        % -- 2) Apply NB (open neutral path on W2) for THIS transformer only
+        if isfield(app.T, 'W2')
+            app.T(k).W2 = NaN;
+        else
+            % If your transformer model uses a different field for the common/neutral winding,
+            % change the line above accordingly. Skip if not applicable.
+            continue
+        end
 
-        % ===== 4) Substation-level metrics =====
-        sid        = app.T(k).Sub;                          
-        g0_sub_avg = meanAbs( GICbase.Subs(sid, tidx) );    
-        g1_sub_avg = meanAbs( GIC1.   Subs(sid, tidx) );   
-        g0_sub_max =  maxAbs( GICbase.Subs(sid, tidx) );    
-        g1_sub_max =  maxAbs( GIC1.   Subs(sid, tidx) );    
+        % -- 3) Run edited network; GIC struct contains both edited and originals
+        [~, ~, ~, GIC] = runGIC_now(app);
 
-        pctMax_sub = pctChange(g0_sub_max, g1_sub_max);
-        dAvg_sub   = g1_sub_avg - g0_sub_avg;
+        % --------------------------
+        % 4a) Per-SUBSTATION rows
+        % --------------------------
+        for sid = 1:nSubs
+            % Baseline vs Edited (full window)
+            g0_sub_avg = meanAbs(GIC.Original_Subs(sid, :));
+            g1_sub_avg = meanAbs(GIC.Subs(          sid, :));
+            g0_sub_max =  maxAbs(GIC.Original_Subs(sid, :));
+            g1_sub_max =  maxAbs(GIC.Subs(          sid, :));
 
-        rows(end+1) = makeRowNB(simID, 'NB_W2_OFF', app.T(k).Name, k, ...   
-                                'substation', app.S(sid).Name, sid, ...
-                                g0_sub_avg, g1_sub_avg, dAvg_sub, pctMax_sub);
+            % Signed absolute max Δ at any time sample
+            diffRow           = GIC.Subs(sid, :) - GIC.Original_Subs(sid, :);
+            absChange         = abs(diffRow);
+            [maxAbsChange, ix]= max(absChange);
+            maxAbsChange      = sign(diffRow(ix)) * maxAbsChange;
 
-        % ===== 5) Next scenario column =====
+            % Safe % change (cap 0→nonzero at 100%)
+            pctMax = pctChange_safe(g0_sub_max, g1_sub_max, 1e-9, 100);
+
+            % Append substation row (ActionType marks NB scenario)
+            rows(end+1) = makeRow( simID, 'NB_W2_OFF', app.T(k).Name, k, ...
+                                   'substation', app.S(sid).Name, sid, ...
+                                   g0_sub_avg, g1_sub_avg, maxAbsChange, pctMax );
+        end
+
+        % ---------------------------------------
+        % 4b) Per-TRANSFORMER (W1) extra row(s)
+        % ---------------------------------------
+        % Use W1 channel (index 1) to add transformer-level info for plotting/analysis.
+        % Shapes: GIC.Trans = [nTrans x 2 x nTime], Original_Trans same.
+        if isfield(GIC, 'Trans') && ~isempty(GIC.Trans)
+            % Baseline vs Edited on W1
+            g0_trW1_avg = meanAbs( squeeze(GIC.Original_Trans(k, 1, :)) );
+            g1_trW1_avg = meanAbs( squeeze(GIC.   Trans(k, 1, :)) );
+            g0_trW1_max =  maxAbs( squeeze(GIC.Original_Trans(k, 1, :)) );
+            g1_trW1_max =  maxAbs( squeeze(GIC.   Trans(k, 1, :)) );
+
+            % Signed maximum absolute Δ on W1 over time
+            row0  = squeeze(GIC.Original_Trans(k, 1, :));   % column vector
+            row1  = squeeze(GIC.   Trans(k, 1, :));         % column vector
+            drow  = (row1 - row0).';                        % make it a row for consistency
+            [mx, ix] = max(abs(drow));
+            maxAbsChange_W1 = sign(drow(ix)) * mx;
+
+            % % change of max |GIC| on W1
+            pctMax_W1 = pctChange_safe(g0_trW1_max, g1_trW1_max, 1e-9, 100);
+
+            % Append transformer row (label entity as "<name> (W1)" to disambiguate)
+            rows(end+1) = makeRow( simID, 'NB_W2_OFF', app.T(k).Name, k, ...
+                                   'transformer', sprintf('%s (W1)', app.T(k).Name), k, ...
+                                   g0_trW1_avg, g1_trW1_avg, maxAbsChange_W1, pctMax_W1 ); 
+        end
+
+        % -- 5) Next scenario column for the heatmap
         simID = simID + 1;
     end
 
-    % --- convert to table for appending/plotting
-    Tadd = rows2table(rows);
+    % ---------- pack rows to table ----------
+    if isempty(rows)
+        Tadd = table();
+    else
+        Tadd = struct2table(rows);
+    end
+
+    % ---------- timing / UI ----------
+    elapsedTime = toc;
+    app.StatusTextArea.Value = [app.StatusTextArea.Value; ...
+        sprintf('Total time applying Neutral Blockers (with W1 rows): %.2f seconds', elapsedTime)];
+    drawnow;
 end
