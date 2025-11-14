@@ -25,8 +25,8 @@ function replot_mag_time_and_freq(app, siteIndices, magPanel)
         % Time Series Plot
         ax1 = uiaxes(innerPanel);
         ax1.Position = [20, yBase + 240, magPanel.Position(3)-40, 180];
-        plot(ax1, tvals, xvals - nanmean(xvals), '-b'); hold(ax1, 'on');
-        plot(ax1, tvals, yvals - nanmean(yvals), '-r');
+        plot(ax1, tvals, xvals - mean(xvals, 'omitnan'), '-b'); hold(ax1, 'on');
+        plot(ax1, tvals, yvals - mean(yvals, 'omitnan'), '-r');
         title(ax1, ['Time Series for ', upper(b(is).site)]);
         ylabel(ax1, 'B (nT)'); 
         legend(ax1, 'Bx', 'By','Location','southwest');

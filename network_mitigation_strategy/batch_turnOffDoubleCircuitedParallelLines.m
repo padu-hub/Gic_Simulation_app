@@ -1,0 +1,104 @@
+function tadd= batch_turnOffDoubleCircuitedParallelLines(app, GICbase)
+% BATCH_TURNOFF500KVLINES
+% ----------------------------------------------------------
+
+%
+% INPUTS
+%   app      : your App Designer handle (must have L/T/OriginalL/OriginalT/S, etc.)
+%   GICbase  : baseline GIC struct from a run on OriginalL/OriginalT
+%              - GICbase.Subs : [nSubs x nTime]
+%
+% OUTPUT
+%   Tadd     : table of rows to append into app.MitigationResults
+% ----------------------------------------------------------
+    tic
+    % ---------- small numeric helpers ----------
+    meanAbs   = @(x) mean(abs(x), 'all', 'omitnan');    % avg |.| over full window
+    maxAbs    = @(x)  max(abs(x), [], 'all', 'omitnan');% max |.| over full window
+
+    % ---------- init row container as struct array (avoids double→struct error) ----------
+    rows = struct('SimID',{},'ActionType',{},'TargetName',{},'TargetID',{}, ...
+                  'Level',{},'EntityName',{},'EntityID',{}, ...
+                  'AvgAbs_Orig_A',{},'AvgAbs_Edit_A',{},'AvgDeltaAbs_A',{}, ...
+                  'MaxPctChange',{});
+
+    % Next simulation index for heatmap X-axis
+    simID = height(app.MitigationResults) + 1;
+    
+    % ---------- find candidate lines with matching Loc matrices ----------
+    nLines = length(app.L);
+    candidateIdx = [];  % Initialize an array to hold indices of candidate lines
+
+    locMap = containers.Map('KeyType', 'char', 'ValueType', 'any'); % Map to store locations
+
+    for i = 1:nLines
+        locKey = mat2str(app.L(i).Loc); % Create a unique key for each location
+        if isKey(locMap, locKey)
+            locMap(locKey) = [locMap(locKey), i]; % Append index to existing key
+        else
+            locMap(locKey) = i; % Create new entry
+        end
+    end
+
+    % Extract indices of lines with matching locations
+    locValues = values(locMap);
+    for idx = locValues
+        if length(idx{1}) > 1            
+            % Find the index of the line with the lowest ResKm among those with the same Loc
+            locIndices = idx{1}; % Get the indices of lines with the same Loc
+            [~, minIdx] = min([app.L(locIndices).ResKm]); % Find the index of the minimum ResKm
+            lowestResKmLine = locIndices(minIdx); % Get the line index with the lowest ResKm
+     
+            % Store the lowest ResKm line index in candidateIdx
+            candidateIdx = [candidateIdx; lowestResKmLine]; % Store the index as a row
+        end
+    end
+
+    nSubs = size(GICbase.Subs, 1);
+
+
+    for i = candidateIdx(:).'  % each line = one scenario
+        % -- 1) Reset to pristine network for an isolated what-if
+        resetAllNetwork(app);  % must restore app.L/app.T from app.OriginalL/app.OriginalT
+
+        % -- 2) Open THIS line (your app's defined "off" semantics)
+        app.L(i).ResKm      = NaN;
+        app.L(i).Resistance = NaN;
+
+        % -- 3) Run edited network (returns GIC1.* arrays)
+        [~, ~, ~, GIC] = runGIC_now(app);
+
+        % -- 4) Substation metrics over full time (one row per sub)
+        for sid = 1:nSubs
+            % Baseline vs Edited
+            g0_sub_avg = meanAbs(GIC.Original_Subs(sid, :));
+            g1_sub_avg = meanAbs(GIC.Subs(  sid, :));
+            g0_sub_max =  maxAbs(GIC.Original_Subs(sid, :));
+            g1_sub_max =  maxAbs(GIC.Subs(  sid, :));
+
+            % % change of the max |GIC| with protected zero handling
+            pctMax = pctChange_safe(g0_sub_max, g1_sub_max, 1e-9, 100);
+
+            % Z value for heatmap = average Δ|GIC| (A) over the full window
+            dAvg   = g1_sub_avg - g0_sub_avg;
+
+            % Append row (uses your existing makeRowNB factory)
+            rows(end+1) = makeRowNB(simID, 'Double Line OFF', app.L(i).Name, i, ... 
+                                     'substation', app.S(sid).Name, sid, ...
+                                     g0_sub_avg, g1_sub_avg, dAvg, pctMax);
+        end
+        % -- 5) Next scenario column
+        simID = simID + 1;
+    end
+
+    % ---------- convert to table ----------
+    if isempty(rows)
+        Tadd = table();
+    else
+        Tadd = struct2table(rows);
+    end
+    toc
+    elapsedTime = toc; % Get the elapsed time from the previous tic
+    app.StatusTextArea.Value = [app.StatusTextArea.Value; sprintf('Total time turning  of HV Lines: %.2f seconds', elapsedTime)];
+    drawnow;
+end

@@ -20,9 +20,11 @@ try
     if app.ApplyNBtoeachautotransformersIndividuallyCheckBox.Value
         Tadd = [Tadd; batch_applyNeutralBlockers(app, GICbase)];
     end
-
     if app.TurnoffHighvoltagelinesindividuallyCheckBox.Value
         Tadd = [Tadd; batch_turnOff500kVLines(app, GICbase)];
+    end
+    if app.TurnoffDoubleCircuitedparallellinesindividuallyCheckBox.Value
+        Tadd = [Tadd; batch_turnOffDoubleCircuitedParallelLines(app, GICbase)];
     end
     
    
