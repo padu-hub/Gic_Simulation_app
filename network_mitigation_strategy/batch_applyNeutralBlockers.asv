@@ -1,4 +1,4 @@
-function batch_applyNeutralBlockers(app, GICbase)
+function Tadd = batch_applyNeutralBlockers(app, GICbase)
 % BATCH_APPLYNEUTRALBLOCKERS
 % ----------------------------------------------------------
 % For each AUTO transformer:
@@ -34,7 +34,10 @@ function batch_applyNeutralBlockers(app, GICbase)
              'AvgAbs_Orig_GIC', [], 'AvgAbs_Edit_GIC', [], ...
              'Max_Orig_GIC', [], 'Max_Edit_GIC', []);
     nSubs = size(GICbase.Subs, 1);
-    Tadd = table();
+
+    % ================================================================
+    % ============ LOOP: one scenario per AUTO transformer ============
+    % ================================================================
     for k = idxAuto(:).'
 
         % -- 1) Reset to pristine network (no cumulative edits)
@@ -44,6 +47,8 @@ function batch_applyNeutralBlockers(app, GICbase)
         if isfield(app.T, 'W2')
             app.T(k).W2 = NaN;
         else
+            % If your transformer model uses a different field for the common/neutral winding,
+            % change the line above accordingly. Skip if not applicable.
             continue
         end
 
@@ -92,14 +97,15 @@ function batch_applyNeutralBlockers(app, GICbase)
 
         % -- 5) Next scenario column for the heatmap
         simID = simID + 1;
-        % ---------- convert to table ----------
-        if isempty(rows)
-            Tadd = table();
-        else
-            Tadd = struct2table(rows);
-        end
-        updateTable(app, Tadd)
     end
+
+    % ---------- pack rows to table ----------
+    if isempty(rows)
+        Tadd = table();
+    else
+        Tadd = struct2table(rows);
+    end
+
     % ---------- timing / UI ----------
     elapsedTime = toc;
     app.StatusTextArea.Value = [app.StatusTextArea.Value; ...

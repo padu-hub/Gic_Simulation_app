@@ -13,9 +13,6 @@ try
     pctThr = app.ThresholdPctEdit.Value;   % e.g., 30
     absThr = app.AbsThresholdAEdit.Value;  % e.g., 3
 
-    %-------------------------------------------------------
-    % Threshold check and heatmap plot for T.AverageDeltaAbs
-    %--------------------------------------------------------
     keep = abs(T.AvgDeltaAbs_A) >= absThr & (T.MaxPctChange >= pctThr);
     T2 = T(keep, :);
     if isempty(T2), figure; text(0.1,0.5,'No entries pass thresholds'); axis off; app.PlotLamp.Color=[0 0.7 0]; return; end

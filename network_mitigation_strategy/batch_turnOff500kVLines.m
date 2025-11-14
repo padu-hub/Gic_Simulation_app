@@ -1,4 +1,4 @@
-function Tadd = batch_turnOff500kVLines(app, GICbase)
+function batch_turnOff500kVLines(app, GICbase)
 % BATCH_TURNOFF500KVLINES
 % ----------------------------------------------------------
 % For each 500 kV line:
@@ -25,12 +25,13 @@ function Tadd = batch_turnOff500kVLines(app, GICbase)
     meanAbs   = @(x) mean(abs(x), 'all', 'omitnan');    % avg |.| over full window
     maxAbs    = @(x)  max(abs(x), [], 'all', 'omitnan');% max |.| over full window
 
-    % ---------- init row container as struct array (avoids double→struct error) ----------
-    rows = struct('SimID',{},'ActionType',{},'TargetName',{},'TargetID',{}, ...
-                  'Level',{},'EntityName',{},'EntityID',{}, ...
-                  'AvgAbs_Orig_A',{},'AvgAbs_Edit_A',{},'AvgDeltaAbs_A',{}, ...
-                  'MaxPctChange',{});
-
+    % ---------- init row container as struct array----------
+    rows = struct('SimID', [], 'ActionType', "", 'TargetName', "", 'TargetID', [], ...
+             'Level', "", 'EntityName', "", 'EntityID', [], ...
+             'AvgDeltaAbs_A', [], 'MaxGicChange', [], 'MaxPctChange', [], ...
+             'AvgAbs_Orig_GIC', [], 'AvgAbs_Edit_GIC', [], ...
+             'Max_Orig_GIC', [], 'Max_Edit_GIC', []);
+    Tadd = table();
     % Next simulation index for heatmap X-axis
     simID = height(app.MitigationResults) + 1;
 
@@ -63,24 +64,21 @@ function Tadd = batch_turnOff500kVLines(app, GICbase)
             % % change of the max |GIC| with protected zero handling
             pctMax = pctChange_safe(g0_sub_max, g1_sub_max, 1e-9, 100);
 
-            % Z value for heatmap = average Δ|GIC| (A) over the full window
-            dAvg   = g1_sub_avg - g0_sub_avg;
-
             % Append row (uses your existing makeRowNB factory)
-            rows(end+1) = makeRowNB(simID, 'LINE_OFF_500kV', app.L(i).Name, i, ... 
+            rows(end+1) = makeRowNB(simID, 'Double Line OFF', app.L(i).Name, i, ... 
                                      'substation', app.S(sid).Name, sid, ...
-                                     g0_sub_avg, g1_sub_avg, dAvg, pctMax);
+                                     g0_sub_avg, g1_sub_avg, g0_sub_max,g1_sub_max, pctMax);
         end
 
         % -- 5) Next scenario column
         simID = simID + 1;
-    end
-
-    % ---------- convert to table ----------
-    if isempty(rows)
-        Tadd = table();
-    else
-        Tadd = struct2table(rows);
+        % ---------- convert to table ----------
+        if isempty(rows)
+            Tadd = table();
+        else
+            Tadd = struct2table(rows);
+        end
+        updateTable(app, Tadd)
     end
     toc
     elapsedTime = toc; % Get the elapsed time from the previous tic

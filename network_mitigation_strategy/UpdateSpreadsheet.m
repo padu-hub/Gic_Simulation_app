@@ -15,31 +15,15 @@ try
     app.gic_originalL=GICbase.Original_Lines;
     app.gic_originalT=GICbase.Original_Trans;
 
-    Tadd = table();
-
     if app.ApplyNBtoeachautotransformersIndividuallyCheckBox.Value
-        Tadd = [Tadd; batch_applyNeutralBlockers(app, GICbase)];
+        batch_applyNeutralBlockers(app, GICbase);
     end
     if app.TurnoffHighvoltagelinesindividuallyCheckBox.Value
-        Tadd = [Tadd; batch_turnOff500kVLines(app, GICbase)];
+        batch_turnOff500kVLines(app, GICbase);
     end
     if app.TurnoffDoubleCircuitedparallellinesindividuallyCheckBox.Value
-        Tadd = [Tadd; batch_turnOffDoubleCircuitedParallelLines(app, GICbase)];
+        batch_turnOffDoubleCircuitedParallelLines(app, GICbase);
     end
-    
-   
-    % Merge into app table
-    if isempty(app.MitigationResults)
-        app.MitigationResults = Tadd;
-    else
-        app.MitigationResults = [app.MitigationResults; Tadd];
-    end
-
-    % Push to Spreadsheet Results table
-    if isvalid(app.SpreadsheetTable)
-        app.SpreadsheetTable.Data = app.MitigationResults;
-    end
-    
     app.ClearBtn.Enable  = 'on';
     app.ExportBtn.Enable = 'on';
 
