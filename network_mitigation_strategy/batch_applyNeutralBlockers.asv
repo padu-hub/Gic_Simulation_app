@@ -28,11 +28,11 @@ function Tadd = batch_applyNeutralBlockers(app, GICbase)
     idxAuto = find(isAuto);
 
     % ---------- rows container (mirror your HV row schema) ----------
-    rows = struct('SimID', {}, 'ActionType', "", 'TargetName', "", 'TargetID', {}, ...
-                  'Level', "", 'EntityName', "", 'EntityID', {}, ...
-                  'GIC_Orig_A', {}, 'GIC_Edit_A', {}, ...
-                  'DeltaAbs_A', {}, 'PctChange_max', {}, ...
-                  'MaxAbsChange', {});
+    rows = struct('SimID', [], 'ActionType', "", 'TargetName', "", 'TargetID', [], ...
+             'Level', "", 'EntityName', "", 'EntityID', [], ...
+             'AvgDeltaAbs_A', [], 'MaxGicChange', [], 'MaxPctChange', [], ...
+             'AvgAbs_Orig_GIC', [], 'AvgAbs_Edit_GIC', [], ...
+             'Max_Orig_GIC', [], 'Max_Edit_GIC', []);
     nSubs = size(GICbase.Subs, 1);
 
     % ================================================================
@@ -65,19 +65,13 @@ function Tadd = batch_applyNeutralBlockers(app, GICbase)
             g0_sub_max =  maxAbs(GIC.Original_Subs(sid, :));
             g1_sub_max =  maxAbs(GIC.Subs(          sid, :));
 
-            % Signed absolute max Δ at any time sample
-            diffRow           = GIC.Subs(sid, :) - GIC.Original_Subs(sid, :);
-            absChange         = abs(diffRow);
-            [maxAbsChange, ix]= max(absChange);
-            maxAbsChange      = sign(diffRow(ix)) * maxAbsChange;
-
             % Safe % change (cap 0→nonzero at 100%)
             pctMax = pctChange_safe(g0_sub_max, g1_sub_max, 1e-9, 100);
 
             % Append substation row (ActionType marks NB scenario)
             rows(end+1) = makeRow( simID, 'NB_W2_OFF', app.T(k).Name, k, ...
                                    'substation', app.S(sid).Name, sid, ...
-                                   g0_sub_avg, g1_sub_avg, maxAbsChange, pctMax );
+                                   g0_sub_avg, g1_sub_avg, g0_sub_max, g1_sub_max, maxAbsChange, pctMax ); %#ok<AGROW>
         end
 
         % ---------------------------------------
@@ -92,20 +86,13 @@ function Tadd = batch_applyNeutralBlockers(app, GICbase)
             g0_trW1_max =  maxAbs( squeeze(GIC.Original_Trans(k, 1, :)) );
             g1_trW1_max =  maxAbs( squeeze(GIC.   Trans(k, 1, :)) );
 
-            % Signed maximum absolute Δ on W1 over time
-            row0  = squeeze(GIC.Original_Trans(k, 1, :));   % column vector
-            row1  = squeeze(GIC.   Trans(k, 1, :));         % column vector
-            drow  = (row1 - row0).';                        % make it a row for consistency
-            [mx, ix] = max(abs(drow));
-            maxAbsChange_W1 = sign(drow(ix)) * mx;
-
             % % change of max |GIC| on W1
             pctMax_W1 = pctChange_safe(g0_trW1_max, g1_trW1_max, 1e-9, 100);
 
             % Append transformer row (label entity as "<name> (W1)" to disambiguate)
             rows(end+1) = makeRow( simID, 'NB_W2_OFF', app.T(k).Name, k, ...
                                    'transformer', sprintf('%s (W1)', app.T(k).Name), k, ...
-                                   g0_trW1_avg, g1_trW1_avg, maxAbsChange_W1, pctMax_W1 ); 
+                                   g0_trW1_avg, g1_trW1_avg, g0_tr_max, g1_tr_max, pctMax_W1 ); %#ok<AGROW>
         end
 
         % -- 5) Next scenario column for the heatmap

@@ -126,7 +126,7 @@ if speedup_option == 1 %"faster" option
             dey = (ey_int(s(1:end-1),:)+ey_int(s(2:end),:))/2;
 
             if length(s)>1
-                V(indslice,sidx) = nansum(repmat(dx,size(dex,2),1).*dex.'+repmat(dy,size(dey,2),1).*dey.',2);
+                V(indslice,sidx) = sum(repmat(dx,size(dex,2),1).*dex.'+repmat(dy,size(dey,2),1).*dey.',2, 'omitnan');
             end
 
         end
@@ -181,7 +181,7 @@ else %Original option using nested for loops
     %         Resources:
     %               https://www.mathworks.com/matlabcentral/answers/441416-numerical-calculation-of-line-integral-over-a-vector-field
     %               https://ocw.mit.edu/ans7870/18/18.013a/textbook/HTML/chapter25/section04.html
-            V(tidx,sidx) = (nansum((diff(x)).*(ex_int(1:end-1)+ex_int(2:end))/2+(diff(y)).*(ey_int(1:end-1)+ey_int(2:end))/2));
+            V(tidx,sidx) = (sum((diff(x)).*(ex_int(1:end-1)+ex_int(2:end))/2+(diff(y)).*(ey_int(1:end-1)+ey_int(2:end))/2, 'omitnan'));
 
 
         end
