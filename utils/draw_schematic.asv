@@ -1,4 +1,4 @@
-function draw_schematic(b, mode, subName, iSub, ax, L, T, GIC, specTimeIndex, timeVex)
+function draw_schematic(b, mode, subName, iSub, ax, L, T, GIC, specTimeIndex, timeVec)
 %DRAW_SCHEMATIC  One-page substation view: lines in/out, xfmrs, and ground flow.
 % Sign rule used here: for wye/auto windings, +GIC => to ground.
 %
@@ -7,7 +7,7 @@ function draw_schematic(b, mode, subName, iSub, ax, L, T, GIC, specTimeIndex, ti
 %   ax       : target axes / UIAxes
 %   L        : line struct array with .Name .fromSub .toSub (case-insensitive)
 %   T        : transformer struct array with .Name .Sub .HV_Type .LV_Type
-%   GIC      : struct with GIC.Lines (nL x nT), GIC.Trans (nTxf x 2 x nT) [W1,W2]
+%   GIC      : struct with GIC.Original_Lines (nL x nT), GIC.Trans (nTxf x 2 x nT) [W1,W2]
 %   iSub     : substation index
 %   timeIndex: time step index
 %
@@ -20,7 +20,7 @@ function draw_schematic(b, mode, subName, iSub, ax, L, T, GIC, specTimeIndex, ti
                 % === GIC Bubble Mode Selector ===
     switch mode
         case 'Display schematic at max'                 
-            row   = GIC.Subs(iSub, :);                % 1 × nTime
+            row   = GIC.Original_Subs(iSub, :);                % 1 × nTime
             [~, idxMax] = max(abs(row), [], 2);       % single scalar index
             timeIndex = idxMax;
 
@@ -32,8 +32,8 @@ function draw_schematic(b, mode, subName, iSub, ax, L, T, GIC, specTimeIndex, ti
     % Canvas
     cla(ax); hold(ax,'on'); axis(ax,[0 10 0 10]); axis(ax,'off'); daspect(ax,[1 1 1]);    
     
-    % Time label
-    timeLbl = sprintf('Time: %s', datestr(b(1).times(timeIndex), 'yyyy-mmm-dd HH:MM:SS'));
+    % Time label    
+    timeLbl = sprintf('Time: %s', datestr(timeVec(specTimeIndex), 'yyyy-mmm-dd HH:MM:SS'));
     title(ax, sprintf('GIC Schematic — %s\n%s', subName, timeLbl), 'FontWeight','bold');
 
     % Center bus
@@ -59,8 +59,8 @@ function draw_schematic(b, mode, subName, iSub, ax, L, T, GIC, specTimeIndex, ti
         if ~(isFrom || isTo), continue; end
 
         I = 0;
-        if isfield(GIC,'Lines') && size(GIC.Lines,1) >= i && size(GIC.Lines,2) >= timeIndex
-            I = GIC.Lines(i,timeIndex);  % + means fromSub -> toSub
+        if isfield(GIC,'Lines') && size(GIC.Original_Lines,1) >= i && size(GIC.Original_Lines,2) >= timeIndex
+            I = GIC.Original_Lines(i,timeIndex);  % + means fromSub -> toSub
         end
 
         % Determine line color based on voltage
@@ -107,8 +107,8 @@ function draw_schematic(b, mode, subName, iSub, ax, L, T, GIC, specTimeIndex, ti
         for kk = 1:numel(tHere)
             ti = tHere(kk);
             % W1/W2 GIC at timeIndex (robustly)
-            Iw1 = getG(GIC, ti, 1, timeIndex);
-            Iw2 = getG(GIC, ti, 2, timeIndex);
+            Iw1 = getG(GIC.Original_Trans, ti, 1, timeIndex);
+            Iw2 = getG(GIC.Original_Trans, ti, 2, timeIndex);
 
             % Draw transformer
             draw_transformer_symbol(ax, 4.8, yX, cXfr);
@@ -169,8 +169,8 @@ function draw_schematic(b, mode, subName, iSub, ax, L, T, GIC, specTimeIndex, ti
     %      'HorizontalAlignment','center','Color',[0.35 0.35 0.35]);
 
     
-    % Extract the value of GIC for the substation directly from GIC.Subs
-    subGIC = GIC.Subs(iSub, timeIndex); % Assuming tHere corresponds to the substation index
+    % Extract the value of GIC for the substation directly from GIC.Original_Subs
+    subGIC = GIC.Original_Subs(iSub, timeIndex); % Assuming tHere corresponds to the substation index
     text(ax, 5.2, 5.50, sprintf('GIC (sub): %.1f A', subGIC), ...
      'Color',cGrnd,'HorizontalAlignment','left','FontWeight','bold');
     hold(ax,'off');

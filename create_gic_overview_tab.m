@@ -30,6 +30,8 @@ function create_gic_overview_tab(app, S, L, T,  b, GIC, tind, timeInput)
     
     %% === LEFT: geoaxes map ===
     mapAxes = geoaxes(grid);
+    mapAxes.Layout.Row = 1;
+    mapAxes.Layout.Column = 1;
     hold(mapAxes, 'on');
     title(mapAxes, 'Alberta Substations & Magnetic Sites');
 
@@ -77,7 +79,7 @@ function create_gic_overview_tab(app, S, L, T,  b, GIC, tind, timeInput)
     %% === RIGHT: GIC Time Series Panel ===
     sidePanel = uipanel(grid, 'Title', 'GIC Time Series');
     subGrid = uigridlayout(sidePanel, [3 1]);
-    subGrid.RowHeight = {30, 30, '1x'};
+    subGrid.RowHeight = {'1x', '1x', '10x'};
 
     % === GIC Type Dropdown ===
     gicTypeDropdown = uidropdown(subGrid, ...
@@ -87,12 +89,15 @@ function create_gic_overview_tab(app, S, L, T,  b, GIC, tind, timeInput)
 
     % === Name Dropdown ===
     entityDropdown = uidropdown(subGrid, 'Editable', 'off');
-
-    % === Axes ===
-    timeAxes = uiaxes(subGrid);
-    title(timeAxes, '');
-    xlabel(timeAxes, 'Time');
-    ylabel(timeAxes, 'GIC (A)');
+    
+    Axes = uiaxes(subGrid);
+    Axes.Layout.Row = 3;
+    % Plot the sine graph in the tsPanel
+    %plot(Axes, t, y, 'g-', 'LineWidth', 1.5, 'DisplayName', 'Sine Wave');
+    %title(Axes, 'Simple Sine Graph');
+    %xlabel(Axes, 'Time (s)');
+    %ylabel(Axes, 'Amplitude');
+    %legend(Axes, 'show');
 
     % === Setup initial list ===
     updateEntityDropdown();
@@ -109,9 +114,9 @@ function create_gic_overview_tab(app, S, L, T,  b, GIC, tind, timeInput)
             case 'Lines'
                 names = {L.Name};
             case 'Transformers w1'
-                names = {app.T.Name};           
+                names = {T.Name};           
             case 'Transformers w2'
-                names = {app.T.Name};
+                names = {T.Name};
         end
         names = sort(names);
         entityDropdown.Items = names;
@@ -121,9 +126,9 @@ function create_gic_overview_tab(app, S, L, T,  b, GIC, tind, timeInput)
 
     function updateTimeseries()
         type = gicTypeDropdown.Value;
-        name = entityDropdown.Value;
-        cla(timeAxes);
-
+        name = entityDropdown.Value;       
+        cla(Axes); % Clear the axes for a fresh plot
+        
         switch type
             case 'Substations'
                 idx = find(strcmp({S.Name}, name));
@@ -146,32 +151,28 @@ function create_gic_overview_tab(app, S, L, T,  b, GIC, tind, timeInput)
         % Check if y1 and y2 have only one value
         if numel(y1) == 1 && numel(y2) == 1
             % Create a histogram-like plot for single values with different colors
-            bar(timeAxes, [1, 2], [y1, y2], 'FaceColor', 'flat');
-            bObj = timeAxes.Children; % Get the bar object
+            bar(Axes, [1, 2], [y1, y2], 'FaceColor', 'flat');
+            bObj = Axes.Children; % Get the bar object
             bObj.CData(1, :) = [1 0 0]; % Set color for edited (red)
             bObj.CData(2, :) = [0 0 1]; % Set color for original (blue)
-            timeAxes.XTick = [1, 2];
-            timeAxes.XTickLabel = {'Edited', 'Original'};
-            ylim(timeAxes, 'auto');
+            Axes.XTick = [1, 2];
+            Axes.XTickLabel = {'Edited', 'Original'};
+            ylim(Axes, 'auto');
         else
-            % Regular plot for multiple values
-            plot(timeAxes, timeVec, y1, 'r-', 'LineWidth', 1.5, 'DisplayName', 'Edited');
-            hold(timeAxes, 'on');
-            plot(timeAxes, timeVec, y2, 'b--', 'LineWidth', 1.5, 'DisplayName', 'Original');
-            title(timeAxes, sprintf('GIC Time Series for %s (%s)', name, type));
-            hold(timeAxes, 'off');
-            % Add legend to the time series plot
-            legend(timeAxes, {'Edited', 'Original'}, 'Location', 'northeast');
-            
-            % Make graph font more visible and the header bold
-            timeAxes.FontSize = 12; % Increase font size for axes
-            timeAxes.Title.FontSize = 14; % Increase font size for title
-            timeAxes.Title.FontWeight = 'bold'; % Make title bold
-            timeAxes.XLabel.FontSize = 12; % Increase font size for x-axis label
-            timeAxes.YLabel.FontSize = 12; % Increase font size for y-axis label
+            % Plot both y1 and y2, excluding NaN values
+            plot(Axes, timeVec(~isnan(y1)), y1(~isnan(y1)), 'r-', 'LineWidth', 1.5, 'DisplayName', 'Edited');
+            hold(Axes, 'on');
+            plot(Axes, timeVec(~isnan(y2)), y2(~isnan(y2)), 'b-', 'LineWidth', 1.5, 'DisplayName', 'Original');
+            hold(Axes, 'off');      
+            % Update axes properties
+            title(Axes, sprintf('GIC Time Series for %s (%s)', name, type));
+            xlabel(Axes, 'Time');
+            ylabel(Axes, 'GIC Value');
+            legend(Axes, 'show');
+            ylim(Axes, 'auto');
                     
         end
-        addGraphToStorage(app, timeAxes, sprintf('GIC @ %s (%s)', name, type));
+        addGraphToStorage(app, Axes, sprintf('GIC @ %s (%s)', name, type));
     end
 
     % === Create new App Tab ===

@@ -7,7 +7,7 @@ function draw_schematic(b, mode, subName, iSub, ax, L, T, GIC, specTimeIndex, ti
 %   ax       : target axes / UIAxes
 %   L        : line struct array with .Name .fromSub .toSub (case-insensitive)
 %   T        : transformer struct array with .Name .Sub .HV_Type .LV_Type
-%   GIC      : struct with GIC.Lines (nL x nT), GIC.Trans (nTxf x 2 x nT) [W1,W2]
+%   GIC      : struct with GIC.Original_Lines (nL x nT), GIC.Trans (nTxf x 2 x nT) [W1,W2]
 %   iSub     : substation index
 %   timeIndex: time step index
 %
@@ -20,7 +20,7 @@ function draw_schematic(b, mode, subName, iSub, ax, L, T, GIC, specTimeIndex, ti
                 % === GIC Bubble Mode Selector ===
     switch mode
         case 'Display schematic at max'                 
-            row   = GIC.Subs(iSub, :);                % 1 × nTime
+            row   = GIC.Original_Subs(iSub, :);                % 1 × nTime
             [~, idxMax] = max(abs(row), [], 2);       % single scalar index
             timeIndex = idxMax;
 
@@ -59,8 +59,8 @@ function draw_schematic(b, mode, subName, iSub, ax, L, T, GIC, specTimeIndex, ti
         if ~(isFrom || isTo), continue; end
 
         I = 0;
-        if isfield(GIC,'Lines') && size(GIC.Lines,1) >= i && size(GIC.Lines,2) >= timeIndex
-            I = GIC.Lines(i,timeIndex);  % + means fromSub -> toSub
+        if isfield(GIC,'Lines') && size(GIC.Original_Lines,1) >= i && size(GIC.Original_Lines,2) >= timeIndex
+            I = GIC.Original_Lines(i,timeIndex);  % + means fromSub -> toSub
         end
 
         % Determine line color based on voltage
@@ -169,8 +169,8 @@ function draw_schematic(b, mode, subName, iSub, ax, L, T, GIC, specTimeIndex, ti
     %      'HorizontalAlignment','center','Color',[0.35 0.35 0.35]);
 
     
-    % Extract the value of GIC for the substation directly from GIC.Subs
-    subGIC = GIC.Subs(iSub, timeIndex); % Assuming tHere corresponds to the substation index
+    % Extract the value of GIC for the substation directly from GIC.Original_Subs
+    subGIC = GIC.Original_Subs(iSub, timeIndex); % Assuming tHere corresponds to the substation index
     text(ax, 5.2, 5.50, sprintf('GIC (sub): %.1f A', subGIC), ...
      'Color',cGrnd,'HorizontalAlignment','left','FontWeight','bold');
     hold(ax,'off');
@@ -189,12 +189,12 @@ function draw_schematic(b, mode, subName, iSub, ax, L, T, GIC, specTimeIndex, ti
     function x = getG(G0, ti, w, t)
         x = 0;
         if isfield(G0,'Trans') ...
-           && size(G0.Trans,1) >= ti && size(G0.Trans,2) >= w && size(G0.Trans,3) >= t
-            x = G0.Trans(ti,w,t);
+           && size(G0.Original_Trans,1) >= ti && size(G0.Original_Trans,2) >= w && size(G0.Original_Trans,3) >= t
+            x = G0.Original_Trans(ti,w,t);
         end
     end
     function d = signToDown(Iw) % + means to ground → point down; − means from ground → up
-        if ~isfinite(Iw) || Iw==0, d = 0; elseif Iw>0, d = +1; else, d = -1; end;
+        if ~isfinite(Iw) || Iw==0, d = 0; elseif Iw>0, d = +1; else, d = -1; end
     end
     
 end
