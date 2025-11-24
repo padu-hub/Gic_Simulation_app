@@ -15,6 +15,7 @@ try
     app.gic_originalL=GICbase.Original_Lines;
     app.gic_originalT=GICbase.Original_Trans;
 
+    app.ClearBtn.Enable  = 'on';
     if app.ApplyNBtoeachautotransformersIndividuallyCheckBox.Value
         batch_applyNeutralBlockers(app, GICbase);
     end
@@ -24,7 +25,6 @@ try
     if app.TurnoffDoubleCircuitedparallellinesindividuallyCheckBox.Value
         batch_turnOffDoubleCircuitedParallelLines(app, GICbase);
     end
-    app.ClearBtn.Enable  = 'on';
     app.ExportBtn.Enable = 'on';
 
     app.UpdateLamp.Color = [0 0.7 0]; % green = done

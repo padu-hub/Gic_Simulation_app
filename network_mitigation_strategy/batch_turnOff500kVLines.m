@@ -32,10 +32,14 @@ function Tadd = batch_turnOff500kVLines(app, GICbase)
     is500  = arrayfun(@(x) isfield(x,'Voltage') && x.Voltage == 500, app.L);
     idx500 = find(is500);
 
-    
-    rows = struct('SimID', {}, 'ActionType', "", 'TargetName', "", 'TargetID', {}, 'Level', "", ... 
-             'EntityName', "", 'EntityID', {}, 'GIC_Orig_A', {}, 'GIC_Edit_A', {}, ...
-             'DeltaAbs_A', {}, 'PctChange_max', {}, 'MaxAbsChange', {})
+    % Initialize row as a structure
+    rows = struct('SimID', {}, 'ActionType', "", 'TargetName', "", 'TargetID', {}, ...
+                 'Level', "", 'EntityName', "", 'EntityID', {}, ...
+                 'AvgDeltaAbs_A', {}, 'MaxGicChange', {}, ...
+                 'MaxPctChange', {}, 'AvgAbs_Orig_GIC', {}, ...
+                 'AvgAbs_Edit_GIC', {}, 'Max_Orig_GIC', {}, ...
+                 'Max_Edit_GIC', {});
+
     nSubs = size(GICbase.Subs, 1);
     
     for i = idx500(:).'  % each line = one scenario
@@ -56,12 +60,6 @@ function Tadd = batch_turnOff500kVLines(app, GICbase)
             g1_sub_avg = meanAbs(GIC.Subs(  sid, :));
             g0_sub_max =  maxAbs(GIC.Original_Subs(sid, :));
             g1_sub_max =  maxAbs(GIC.Subs(  sid, :));
-            
-            % Calculate the absolute maximum change in GIC between edited and original
-            diffRow             = GIC.Subs(sid, :) - GIC.Original_Subs(sid, :);
-            absChange           = abs(diffRow);
-            [maxAbsChange, k]   = max(absChange);
-            maxAbsChange        = sign(diffRow(k)) * maxAbsChange;
 
             % % change of the max |GIC| with protected zero handling
             pctMax = pctChange_safe(g0_sub_max, g1_sub_max, 1e-9, 100);
@@ -69,18 +67,21 @@ function Tadd = batch_turnOff500kVLines(app, GICbase)
             % Append row (uses your existing makeRowNB factory)
             rows(end+1) = makeRow( simID, 'LINE_OFF_500kV', app.L(i).Name, i, ... 
                                      'substation', app.S(sid).Name, sid, ...
-                                     g0_sub_avg, g1_sub_avg, maxAbsChange, pctMax);
+                                     g0_sub_avg, g1_sub_avg,g0_sub_max,g1_sub_max, pctMax);
+        
+                % ---------- convert to table ----------
+            if isempty(rows)
+                Tadd = table();
+            else
+                Tadd = struct2table(rows);
+            end
+            updateTable(app, Tadd)
+        
         end
 
         % -- 5) Next scenario column
         simID = simID + 1;
-    end
 
-    % ---------- convert to table ----------
-    if isempty(rows)
-        Tadd = table();
-    else
-        Tadd = struct2table(rows);
     end
     toc
     elapsedTime = toc; % Get the elapsed time from the previous tic

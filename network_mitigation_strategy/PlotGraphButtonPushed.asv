@@ -16,7 +16,7 @@ try
     % ----------------------------------------
     % Plotting of Average Change in GIC heatmaps
     % ----------------------------------------
-    keep = abs(T.DeltaAbs_A) >= absThr & (T.PctChange_max >= pctThr);
+    keep = abs(cell2mat(T.AvgDeltaAbs_A)) >= absThr;
     T2 = T(keep, :);
     if isempty(T2), figure; text(0.1,0.5,'No entries pass thresholds'); axis off; app.PlotLamp.Color=[0 0.7 0]; return; end
 
@@ -27,7 +27,7 @@ try
     for r = 1:numel(entities)
         for c = 1:numel(sims)
             mask = (T2.EntityName==entities(r)) & (T2.TargetName==sims(c));
-            Z(r,c) = mean(T2.DeltaAbs_A(mask), 'omitnan');  % average Δ over any duplicate rows
+            Z(r,c) = mean(cell2mat(T2.AvgDeltaAbs_A(mask)), 'omitnan');  % average Δ over any duplicate rows
         end
     end
 
@@ -46,10 +46,10 @@ try
     
         
     % ----------------------------------------
-    % Plotting of MaxAbsChange heatmaps
+    % Plotting of MaxGICChange heatmaps
     % ----------------------------------------
     
-    keep = abs(T.MaxAbsChange) >= absThr & (T.PctChange_max >= pctThr);
+    keep = abs(cell2mat(T.MaxGicChange)) >= absThr & (cell2mat(T.MaxPctChange) >= pctThr);
     T3 = T(keep, :);
     if isempty(T3), figure; text(0.1,0.5,'No entries pass thresholds'); axis off; app.PlotLamp.Color=[0 0.7 0]; return; end
 
@@ -62,7 +62,7 @@ try
     for r = 1:numel(entities)
         for c = 1:numel(sims)
             mask = (T3.EntityName==entities(r)) & (T3.TargetName==sims(c));
-            Z_max(r,c) = max(T3.MaxAbsChange(mask), [], 'omitnan');  % maximum absolute change over any duplicate rows
+            Z_max(r,c) = max(cell2mat(T3.MaxAbsChange(mask)), [], 'omitnan');  % maximum absolute change over any duplicate rows
         end
     end
     % External figure for MaxAbsChange

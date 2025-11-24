@@ -34,6 +34,7 @@ function batch_applyNeutralBlockers(app, GICbase)
              'AvgAbs_Orig_GIC', [], 'AvgAbs_Edit_GIC', [], ...
              'Max_Orig_GIC', [], 'Max_Edit_GIC', []);
     nSubs = size(GICbase.Subs, 1);
+    nTrans = size(GICbase.Trans, 1);
     Tadd = table();
     for k = idxAuto(:).'
 
@@ -66,28 +67,29 @@ function batch_applyNeutralBlockers(app, GICbase)
             % Append substation row (ActionType marks NB scenario)
             rows(end+1) = makeRow( simID, 'NB_W2_OFF', app.T(k).Name, k, ...
                                    'substation', app.S(sid).Name, sid, ...
-                                   g0_sub_avg, g1_sub_avg, g0_sub_max, g1_sub_max, maxAbsChange, pctMax ); %#ok<AGROW>
+                                   g0_sub_avg, g1_sub_avg, g0_sub_max, g1_sub_max, pctMax );
         end
 
-        % ---------------------------------------
-        % 4b) Per-TRANSFORMER (W1) extra row(s)
-        % ---------------------------------------
-        % Use W1 channel (index 1) to add transformer-level info for plotting/analysis.
-        % Shapes: GIC.Trans = [nTrans x 2 x nTime], Original_Trans same.
-        if isfield(GIC, 'Trans') && ~isempty(GIC.Trans)
-            % Baseline vs Edited on W1
-            g0_trW1_avg = meanAbs( squeeze(GIC.Original_Trans(k, 1, :)) );
-            g1_trW1_avg = meanAbs( squeeze(GIC.   Trans(k, 1, :)) );
-            g0_trW1_max =  maxAbs( squeeze(GIC.Original_Trans(k, 1, :)) );
-            g1_trW1_max =  maxAbs( squeeze(GIC.   Trans(k, 1, :)) );
-
-            % % change of max |GIC| on W1
-            pctMax_W1 = pctChange_safe(g0_trW1_max, g1_trW1_max, 1e-9, 100);
-
-            % Append transformer row (label entity as "<name> (W1)" to disambiguate)
-            rows(end+1) = makeRow( simID, 'NB_W2_OFF', app.T(k).Name, k, ...
-                                   'transformer', sprintf('%s (W1)', app.T(k).Name), k, ...
-                                   g0_trW1_avg, g1_trW1_avg, g0_tr_max, g1_tr_max, pctMax_W1 ); %#ok<AGROW>
+        for Tid = 1:nTrans
+            % ---------------------------------------
+            % 4b) Per-TRANSFORMER (W1) extra row(s)
+            % ---------------------------------------
+            % Use W1 channel (index 1) to add transformer-level info for plotting/analysis.
+            if isfield(GIC, 'Trans') && ~isempty(GIC.Trans)
+                % Baseline vs Edited on W1
+                g0_trW1_avg = meanAbs( squeeze(GIC.Original_Trans(Tid, 1, :)) );
+                g1_trW1_avg = meanAbs( squeeze(GIC.   Trans(Tid, 1, :)) );
+                g0_trW1_max =  maxAbs( squeeze(GIC.Original_Trans(Tid, 1, :)) );
+                g1_trW1_max =  maxAbs( squeeze(GIC.   Trans(Tid, 1, :)) );
+    
+                % % change of max |GIC| on W1
+                pctMax_W1 = pctChange_safe(g0_trW1_max, g1_trW1_max, 1e-9, 100);
+    
+                % Append transformer row (label entity as "<name> (W1)" to disambiguate)
+                rows(end+1) = makeRow( simID, 'NB_W2_OFF', app.T(k).Name, k, ...
+                                       'transformer', sprintf('%s (W1)', app.T(k).Name), Tid, ...
+                                       g0_trW1_avg, g1_trW1_avg, g0_trW1_max, g1_trW1_max, pctMax_W1 );
+            end
         end
 
         % -- 5) Next scenario column for the heatmap
