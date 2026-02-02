@@ -15,7 +15,6 @@ try
     app.gic_originalL=GICbase.Original_Lines;
     app.gic_originalT=GICbase.Original_Trans;
 
-    app.ClearBtn.Enable  = 'on';
     if app.ApplyNBtoeachautotransformersIndividuallyCheckBox.Value
         batch_applyNeutralBlockers(app, GICbase);
     end
@@ -25,6 +24,29 @@ try
     if app.TurnoffDoubleCircuitedparallellinesindividuallyCheckBox.Value
         batch_turnOffDoubleCircuitedParallelLines(app, GICbase);
     end
+    if app.RunMitigationnumbersCheckBox.Value
+            % Get selected text
+        modeUI = app.MitigationModeDropDown.Value;
+    
+        % Map UI text to internal modeStr
+        switch modeUI
+            case 'Mode 1: More feasible solution'
+                modeStr = 'original';
+    
+            case 'Mode 2: Neutral blockers (all wye windings)'
+                modeStr = 'windings_only';
+    
+            case 'Mode 3: Any line'
+                modeStr = 'all_lines';
+    
+            otherwise
+                modeStr = 'original';  % fallback
+        end
+    
+        % Run mitigation loop under selected mode
+        app.SpreadsheetTable = runGreedyGICMitigation(app, GICbase, modeStr);
+    end
+    app.ClearBtn.Enable  = 'on';
     app.ExportBtn.Enable = 'on';
 
     app.UpdateLamp.Color = [0 0.7 0]; % green = done

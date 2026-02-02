@@ -1,0 +1,24 @@
+function windingIsWye = getWyeGroundedWindings(T)
+    n = numel(T);
+    windingIsWye = false(n,2);
+
+    for k = 1:n
+
+        % ---------- HV SIDE (W1) ----------
+        if isfield(T(k),'HV_Type') && ~isempty(T(k).HV_Type)
+            c = lower(strtrim(T(k).HV_Type));   % convert to lowercase
+            if strcmp(c,'wye')
+                windingIsWye(k,1) = true;
+            end
+        end
+
+        % ---------- LV SIDE (W2) ----------
+        if isfield(T(k),'LV_Type') && ~isempty(T(k).LV_Type)
+            c = lower(strtrim(T(k).LV_Type));
+            if strcmp(c,'wye')
+                windingIsWye(k,2) = true;
+            end
+        end
+
+    end
+end
