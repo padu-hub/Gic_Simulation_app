@@ -100,6 +100,11 @@ function plot_gic_mag_map(app, S, L, tind, b, GIC, timeInput, mode)
                     cVals = gicVals;
                     titleStr = 'Max GIC Change (Edited - Original)';
 
+                    % Call the local function to perform ranking and printing
+                    rankSubstationsByChange(S, GIC, gicDiff, idxMaxDiff);
+
+                    % Continue with plotting using gicVals/cVals/titleStr already set
+
                 case 'Snapshot'
                     gicVals = currentData(:, timeIndex);
                     cVals = gicVals;
@@ -158,5 +163,58 @@ function plot_gic_mag_map(app, S, L, tind, b, GIC, timeInput, mode)
 
         otherwise
             error('Unknown mode: %s', mode);
+    end
+end
+
+
+
+
+
+
+
+
+
+
+% === Rank Substations by Change and Print Percentages ===
+function rankSubstationsByChange(S, GIC, gicDiff, idxMaxDiff)
+    % RANKSUBSTATIONSBYCHANGE Print ranked substations by peak GIC change and percentage.
+    %   S               - struct array of substations with field Name
+    %   GIC             - struct with Original_Subs (n x t)
+    %   gicDiff         - n x t matrix of (abs(current)-abs(original)) with sign preserved
+    %   idxMaxDiff      - n x 1 indices of time of peak absolute change per substation
+
+    % Compute signed peak change per substation (at its peak-diff time)
+    n = size(gicDiff,1);
+    peakChange = arrayfun(@(i) gicDiff(i, idxMaxDiff(i)), 1:n)';
+
+    % Absolute change for ranking
+    absChange = abs(peakChange);
+
+    % Original magnitude at the same peak time (absolute)
+    origAtPeak = arrayfun(@(i) abs(GIC.Original_Subs(i, idxMaxDiff(i))), 1:n)';
+
+    % Percentage change: handle zeros in original
+    pctChange = zeros(n,1);
+    nz = origAtPeak ~= 0;
+    pctChange(nz) = 100 * (absChange(nz) ./ origAtPeak(nz));
+    pctChange(~nz & absChange>0) = Inf; % indicate infinite percent change
+
+    % Prepare names and sort by absolute change descending
+    names = {S(:).Name}';
+    [sortedAbsChange, sortIdx] = sort(absChange, 'descend');
+    sortedNames = names(sortIdx);
+    sortedPct = pctChange(sortIdx);
+    sortedSignedChange = peakChange(sortIdx);
+
+    % Display ranked list in Command Window
+    fprintf('\nRanked Substations by Peak GIC Change (Edited - Original):\n');
+    fprintf('%3s  %-30s  %14s  %12s  %8s\n', '#','Substation','Signed Change (A)','Change (A)','Change (%)');
+    for kk = 1:numel(sortedNames)
+        if isinf(sortedPct(kk))
+            pctStr = 'Inf (orig 0)';
+        else
+            pctStr = sprintf('%.1f%%', sortedPct(kk));
+        end
+        fprintf('%3d  %-30s  %14.1f  %12.1f  %8s\n', kk, sortedNames{kk}, sortedSignedChange(kk), sortedAbsChange(kk), pctStr);
     end
 end
