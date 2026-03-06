@@ -32,8 +32,17 @@ function draw_schematic(b, mode, subName, iSub, ax, L, T, GIC, specTimeIndex, ti
     % Canvas
     cla(ax); hold(ax,'on'); axis(ax,[0 10 0 10]); axis(ax,'off'); daspect(ax,[1 1 1]);    
     
-    % Time label    
-    timeLbl = sprintf('Time: %s', datestr(timeVec(specTimeIndex), 'yyyy-mmm-dd HH:MM:SS'));
+    % Time label
+    
+    % Time label
+    % If mode is 'Display schematic at chosen time', ensure specTimeIndex is within bounds
+    if strcmp(mode,'Display schematic at chosen time')
+        if specTimeIndex < 1 || specTimeIndex > numel(timeVec)
+            disp('Time input selected is greater than simulated time, select again from e-field tab');
+            return;
+        end
+    end
+    timeLbl = sprintf('Time: %s', datestr(timeVec(timeIndex), 'yyyy-mmm-dd HH:MM:SS'));
     title(ax, sprintf('GIC Schematic — %s\n%s', subName, timeLbl), 'FontWeight','bold');
 
     % Center bus
