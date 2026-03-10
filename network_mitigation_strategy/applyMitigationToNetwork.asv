@@ -9,8 +9,7 @@ function [app, lineOpen, windingBlocked, desc] = ...
                 app.L(i).ResKm = NaN;
                 app.L(i).Resistance = NaN;
             end
-            desc = sprintf('Turned OFF line %s\n', app.L(i).Name);
-            
+            desc = sprintf('Turned OFF line %d\n', app.L(i).Name);
             
 
 

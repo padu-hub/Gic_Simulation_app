@@ -154,7 +154,6 @@ mitigations{1} = '0: Baseline (no mitigation applied)';
 
 msg = sprintf('Baseline: TotalGIC = %.2f, MaxTrans = %.2f\n', sum0, maxT0);
 app.StatusTextArea.Value = [app.StatusTextArea.Value; msg];
-drawnow;
 
 % Current GIC state in loop
 GIC_current = GICbase;

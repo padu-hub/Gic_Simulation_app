@@ -15,16 +15,11 @@ try
     app.gic_originalL=GICbase.Original_Lines;
     app.gic_originalT=GICbase.Original_Trans;
 
-    if app.ApplyNBtoeachautotransformersIndividuallyCheckBox.Value
-        batch_applyNeutralBlockers(app, GICbase);
-    end
-    if app.TurnoffHighvoltagelinesindividuallyCheckBox.Value
+    if app.TurnoffallHighvoltagelinesindividuallyCheckBox.Value
         batch_turnOff500kVLines(app, GICbase);
     end
-    if app.TurnoffDoubleCircuitedparallellinesindividuallyCheckBox.Value
-        batch_turnOffDoubleCircuitedParallelLines(app, GICbase);
-    end
-    if app.RunMitigationnumbersCheckBox.Value
+
+    if app.RunothermassindividualmitigationsCheckBox.Value
             % Get selected text
         modeUI = app.MitigationModeDropDown.Value;
     
@@ -38,6 +33,9 @@ try
     
             case 'Mode 3: Any line'
                 modeStr = 'all_lines';
+
+            case 'Mode 4: Parallel Lines'
+                modeStr = 'parallel_lines';
     
             otherwise
                 modeStr = 'original';  % fallback
