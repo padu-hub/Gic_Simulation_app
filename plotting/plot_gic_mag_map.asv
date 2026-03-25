@@ -118,15 +118,8 @@ function plot_gic_mag_map(app, S, L, tind, b, GIC, timeInput, mode)
                 'filled', 'MarkerEdgeColor', 'k');
             cb = colorbar;
             cb.Label.String = 'GIC (A)';
-            colormap(redblue(3));
-            % Center colormap on zero by setting symmetric color axis around max absolute value
-            maxAbs = max(abs(cVals(:)));
-            if ~isempty(maxAbs) && isfinite(maxAbs) && maxAbs > 0
-                caxis([-maxAbs maxAbs]);
-            else
-                caxis([-1 1]); % fallback to avoid degenerate colormap
-            end
-                        
+            colormap jet;
+            
 
             
             % === Plot Substation Names ===

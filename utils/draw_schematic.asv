@@ -32,8 +32,9 @@ function draw_schematic(b, mode, subName, iSub, ax, L, T, GIC, specTimeIndex, ti
     % Canvas
     cla(ax); hold(ax,'on'); axis(ax,[0 10 0 10]); axis(ax,'off'); daspect(ax,[1 1 1]);    
     
-    % Time label    
-    timeLbl = sprintf('Time: %s', datestr(timeVec(specTimeIndex), 'yyyy-mmm-dd HH:MM:SS'));
+    % Time label
+    
+    timeLbl = sprintf('Time: %s', datetime(timeVec(timeIndex), 'yyyy-mmm-dd HH:MM:SS'));
     title(ax, sprintf('GIC Schematic — %s\n%s', subName, timeLbl), 'FontWeight','bold');
 
     % Center bus
@@ -107,8 +108,8 @@ function draw_schematic(b, mode, subName, iSub, ax, L, T, GIC, specTimeIndex, ti
         for kk = 1:numel(tHere)
             ti = tHere(kk);
             % W1/W2 GIC at timeIndex (robustly)
-            Iw1 = getG(GIC.Original_Trans, ti, 1, timeIndex);
-            Iw2 = getG(GIC.Original_Trans, ti, 2, timeIndex);
+            Iw1 = getG(GIC, ti, 1, timeIndex);
+            Iw2 = getG(GIC, ti, 2, timeIndex);
 
             % Draw transformer
             draw_transformer_symbol(ax, 4.8, yX, cXfr);
@@ -189,12 +190,12 @@ function draw_schematic(b, mode, subName, iSub, ax, L, T, GIC, specTimeIndex, ti
     function x = getG(G0, ti, w, t)
         x = 0;
         if isfield(G0,'Trans') ...
-           && size(G0.Trans,1) >= ti && size(G0.Trans,2) >= w && size(G0.Trans,3) >= t
-            x = G0.Trans(ti,w,t);
+           && size(G0.Original_Trans,1) >= ti && size(G0.Original_Trans,2) >= w && size(G0.Original_Trans,3) >= t
+            x = G0.Original_Trans(ti,w,t);
         end
     end
     function d = signToDown(Iw) % + means to ground → point down; − means from ground → up
-        if ~isfinite(Iw) || Iw==0, d = 0; elseif Iw>0, d = +1; else, d = -1; end;
+        if ~isfinite(Iw) || Iw==0, d = 0; elseif Iw>0, d = +1; else, d = -1; end
     end
     
 end

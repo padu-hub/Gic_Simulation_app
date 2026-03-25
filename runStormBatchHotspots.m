@@ -124,7 +124,7 @@ function results = runStormBatchHotspots(app, S, L, T)
         tind = data.tind(:);
 
         % IMPORTANT: time vector ONLY for tind
-        timeVec = data.b(1).times(tind);
+        timeVec = data.timeVec;
 
         % -----------------------------
         % Run GIC simulation only for tind
