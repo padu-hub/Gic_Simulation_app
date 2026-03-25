@@ -1,180 +1,169 @@
 function results = runGreedyGICMitigation(app, GICbase, modeStr)
 % RUNGREEDYGICMITIGATION
-% ========================================================================
-% PURPOSE:
-%   Runs a greedy mitigation loop to reduce GIC in the network using one of
-%   three selectable modes. At each step, the algorithm:
-%       1. Identifies which mitigation actions are allowed in the mode.
-%       2. Evaluates the severity (max |GIC|) on all eligible components.
-%       3. Picks the SINGLE worst element (line or winding).
-%       4. Applies the correct mitigation (turn line off or block winding).
-%       5. Re-simulates the GIC with the updated network.
-%       6. Stores GIC metrics for plotting.
+% Runs a greedy GIC mitigation routine using the selected mode.
 %
-% MODES:
-%   1) 'original'
-%       - Turn OFF parallel lines ONLY (must leave ≥1 alive in each group)
-%       - Apply neutral blocker ONLY to autotransformer W2
+% Mode summary:
+%   'original'        -> parallel lines + auto W2 blockers
+%   'windings_only'   -> only winding blockers
+%   'all_lines'       -> only line opening on any line
+%   'parallel_lines'  -> only parallel-line opening
 %
-%   2) 'windings_only'
-%       - Do NOT turn off any lines
-%       - Apply neutral blocker to ANY transformer winding that is
-%         wye-grounded (W1 or W2)
-%
-%   3) 'all_lines'
-%       - Turn OFF ANY line (no parallel logic required)
-%       - Do NOT apply any neutral blockers
-%   
-%   4) 'Parallel'
-%       - Turn OFF parallel lines ONLY (must leave ≥1 alive in each group)
-%
-%
-% NOTES:
-%   - The algorithm stops when no further valid mitigation is possible.
-%   - Baseline (0 mitigations) is stored as step 1 in results arrays.
-%   - Uses helper functions:
-%         buildParallelGroups
-%         getWyeGroundedWindings
-%         selectWorstGICElement
-%         applyMitigationToNetwork
-%         plotGICMitigationResults
-%
-% INPUTS:
-%   app      - App object containing L (lines), T (transformers), and
-%              runGIC_now(app) for simulation.
-%   GICbase  - Baseline GIC struct BEFORE mitigation.
-%   modeStr  - 'original', 'windings_only', or 'all_lines'
-%
-% OUTPUT:
-%   results - Struct containing:
-%       sumGICSubs     -> total substation GIC per step
-%       maxTransGIC    -> max transformer GIC per step
-%       mitigations    -> description for each step
-%       lineOpen       -> bool array tracking opened lines
-%       windingBlocked -> bool array tracking blocked windings
-%       parallelGroups -> parallel line groups (Mode 1 only)
-%       modeStr        -> echo of selected mode
-%
-% ========================================================================
+% Notes:
+%   - Baseline is stored at row/index 1
+%   - Each new mitigation is appended after re-running the simulation
+%   - Helper functions are assumed to already exist and be correct
 
-GICbase.Subs = GICbase.Original_Subs;
+%% Normalize baseline GIC fields
+GICbase.Subs  = GICbase.Original_Subs;
 GICbase.Lines = GICbase.Original_Lines;
 GICbase.Trans = GICbase.Original_Trans;
-%% --------------------------------------------------
-%  1. NORMALIZE MODE AND SET MODE FLAGS
-% ---------------------------------------------------
+
+%% Decode selected mitigation mode
 modeStr = lower(strtrim(modeStr));
 
 switch modeStr
-
     case 'original'
-        % Mode 1: parallel line switching + auto W2 blockers only
         activeLineMitigation    = true;
         activeWindingMitigation = true;
         lineMode    = 'parallel';
         windingMode = 'autoW2';
 
     case 'windings_only'
-        % Mode 2: only apply neutral blockers on any wye winding
         activeLineMitigation    = false;
         activeWindingMitigation = true;
         lineMode    = '';
-        windingMode = 'allWye';
+        windingMode = 'all';
 
     case 'all_lines'
-        % Mode 3: only turn off any line, no blockers at all
         activeLineMitigation    = true;
         activeWindingMitigation = false;
         lineMode    = 'allLines';
         windingMode = '';
 
     case 'parallel_lines'
-        activeLineMitigation    = true;  
+        activeLineMitigation    = true;
         activeWindingMitigation = false;
-        lineMode = 'parallel';
+        lineMode    = 'parallel';
+        windingMode = '';
 
     otherwise
-        error('Invalid modeStr: %s. Must be original, windings_only, or all_lines.', modeStr);
+        error('Invalid modeStr: %s', modeStr);
 end
 
-
-%% --------------------------------------------------
-%  2. INITIALIZE BASIC NETWORK INFO
-% ---------------------------------------------------
+%% Basic network information and static eligibility masks
 nLines = numel(app.L);
 nTrans = numel(app.T);
 
-% Build parallel groups (only needed in Mode 1)
-if strcmp(lineMode,'parallel')
+if strcmp(lineMode, 'parallel')
     parallelGroups = buildParallelGroups(app.L);
 else
-    parallelGroups = {}; % unused
+    parallelGroups = {};
 end
 
-% Identify autotransformers for Mode 1 auto-winding blocking
 isAuto = arrayfun(@(t) ...
     (isfield(t,'HV_Type') && strcmpi(t.HV_Type,'auto')) || ...
     (isfield(t,'LV_Type') && strcmpi(t.LV_Type,'auto')), ...
     app.T);
 
-% Identify wye-grounded windings for Mode 2
 windingIsWye = getWyeGroundedWindings(app.T);
+bothWye = windingIsWye(:,1) & windingIsWye(:,2);
 
-% State trackers
-lineOpen       = false(nLines,1);     % true = line has been opened
-windingBlocked = false(nTrans,2);     % true = that winding has been blocked
+%% State trackers
+lineOpen       = false(nLines,1);
+windingBlocked = false(nTrans,2);
 
+%% Clear and initialize result storage
+sumGICSubs   = [];
+maxTransGIC  = [];
+maxLinesGIC  = [];
+maxTransName = strings(0,1);
+maxLineName  = strings(0,1);
+mitigations  = {};
 
-%% --------------------------------------------------
-%  3. STORAGE FOR RESULTS
-% ---------------------------------------------------
-sumGICSubs  = [];   % total substation GIC per step
-maxTransGIC = [];   % max transformer GIC per step
-mitigations = {};   % description log
+%% Reset app table for a fresh run
+app.MitigationResults = app.MitigationResults([],:);
+app.SpreadsheetTable.Data = app.MitigationResults;
 
+%% Baseline metrics
+subsAbs0 = abs(GICbase.Subs);
+totPerT0 = sum(subsAbs0, 1, 'omitnan');
+sum0     = max(totPerT0, [], 'omitnan');
 
-%% --------------------------------------------------
-%  4. BASELINE METRICS BEFORE ANY MITIGATION
-% ---------------------------------------------------
-subsAbs  = abs(GICbase.Subs);
-totPerT  = sum(subsAbs,1,'omitnan');
-sum0     = max(totPerT);
+if isfield(GICbase, 'Trans') && ~isempty(GICbase.Trans)
+    transAbs0 = abs(GICbase.Trans);
+    [maxT0, linIdxT0] = max(transAbs0, [], 'all', 'omitnan');
 
-if isfield(GICbase,'Trans')
-    transAbs = abs(GICbase.Trans);
-    maxT0    = max(transAbs,[],'all','omitnan');
+    if isempty(maxT0) || isnan(maxT0)
+        maxT0 = 0;
+        maxTransName0 = "None";
+    else
+        [transIdx0, windIdx0] = ind2sub(size(transAbs0), linIdxT0);
+        if isfield(app.T(transIdx0), 'Name')
+            maxTransName0 = string(app.T(transIdx0).Name) + " (W" + string(windIdx0) + ")";
+        else
+            maxTransName0 = "Transformer " + string(transIdx0) + " (W " + string(windIdx0) + ")";
+        end
+    end
 else
     maxT0 = 0;
+    maxTransName0 = "None";
 end
 
-sumGICSubs(1)  = sum0;
-maxTransGIC(1) = maxT0;
-mitigations{1} = '0: Baseline (no mitigation applied)';
+if isfield(GICbase, 'Lines') && ~isempty(GICbase.Lines)
+    linesAbs0 = abs(GICbase.Lines);
+    [maxL0, linIdxL0] = max(linesAbs0, [], 'all', 'omitnan');
 
+    if isempty(maxL0) || isnan(maxL0)
+        maxL0 = 0;
+        maxLineName0 = "None";
+    else
+        [lineIdx0, ~] = ind2sub(size(linesAbs0), linIdxL0);
+        if isfield(app.L(lineIdx0), 'Name')
+            maxLineName0 = string(app.L(lineIdx0).Name);
+        else
+            maxLineName0 = "Line " + string(lineIdx0);
+        end
+    end
+else
+    maxL0 = 0;
+    maxLineName0 = "None";
+end
 
-msg = sprintf('Baseline: TotalGIC = %.2f, MaxTrans = %.2f\n', sum0, maxT0);
-app.StatusTextArea.Value = [app.StatusTextArea.Value; msg];
+sumGICSubs(1)   = sum0;
+maxTransGIC(1)  = maxT0;
+maxLinesGIC(1)  = maxL0;
+maxTransName(1) = maxTransName0;
+maxLineName(1)  = maxLineName0;
+mitigations{1}  = '0: Baseline (no mitigation applied)';
+
+baselineMsg = sprintf('Baseline -> TotalGIC = %.2f | MaxTrans = %.2f [%s] | MaxLine = %.2f [%s]', ...
+    sum0, maxT0, char(maxTransName0), maxL0, char(maxLineName0));
+app.StatusTextArea.Value = [app.StatusTextArea.Value; baselineMsg];
+
+baselineRow = table( ...
+    "Baseline", ...
+    maxT0, ...
+    maxTransName0, ...
+    sum0, ...
+    maxL0, ...
+    maxLineName0, ...
+    'VariableNames', app.MitigationResults.Properties.VariableNames);
+
+app.MitigationResults = [app.MitigationResults; baselineRow];
+app.SpreadsheetTable.Data = app.MitigationResults;
 drawnow;
 
-% Current GIC state in loop
+%% Initialize loop state
 GIC_current = GICbase;
-step = 1;    % number of mitigations applied
+step = 1;
 
-
-%% --------------------------------------------------
-%  5. MAIN GREEDY MITIGATION LOOP
-% ---------------------------------------------------
+%% Main greedy mitigation loop
 while true
 
-    %% --------------------------------------------------
-    %  BUILD CANDIDATE LINE SET (depending on mode)
-    % ---------------------------------------------------
+    % Build current line candidates
     if activeLineMitigation
-
         switch lineMode
-
             case 'parallel'
-                % Only lines in parallel groups; must keep >=1 alive
                 candLines = [];
                 for g = 1:numel(parallelGroups)
                     grp = parallelGroups{g};
@@ -186,25 +175,18 @@ while true
                 candLines = unique(candLines);
 
             case 'allLines'
-                % Every unopened line is a candidate
                 candLines = find(~lineOpen);
 
             otherwise
                 candLines = [];
         end
-
     else
         candLines = [];
     end
 
-
-    %% --------------------------------------------------
-    %  BUILD CANDIDATE WINDING SET (depending on mode)
-    % ---------------------------------------------------
+    % Build current winding candidates
     if activeWindingMitigation
-
         switch windingMode
-
             case 'autoW2'
                 candWind = [];
                 for k = 1:nTrans
@@ -213,12 +195,21 @@ while true
                     end
                 end
 
-            case 'allWye'
+            case 'all'
                 candWind = [];
                 for k = 1:nTrans
-                    for w = 1:2
-                        if windingIsWye(k,w) && ~windingBlocked(k,w)
-                            candWind(end+1,:) = [k w];
+
+                    if bothWye(k)
+                        for w = 1:2
+                            if ~windingBlocked(k,w)
+                                candWind(end+1,:) = [k w];
+                            end
+                        end
+                    end
+
+                    if isAuto(k) && ~windingBlocked(k,2)
+                        if isempty(candWind) || ~any(candWind(:,1)==k & candWind(:,2)==2)
+                            candWind(end+1,:) = [k 2];
                         end
                     end
                 end
@@ -226,119 +217,142 @@ while true
             otherwise
                 candWind = [];
         end
-
     else
         candWind = [];
     end
 
-
-    %% --------------------------------------------------
-    %  STOP CONDITIONS
-    %  1) No further mitigation options available
-    %  2) Total GIC at substations has reached zero
-    %  which ever comes first
-    % ---------------------------------------------------
-    subsAbsStop  = abs(GIC_current.Subs);
-    totPerTStop  = sum(subsAbsStop,1,'omitnan');
-    % Compute current total GIC sum over substations (max over time)
-    currentTotalGIC = max(totPerTStop);
-    
-    % Condition A: no remaining line or winding actions
+    % Stop if nothing remains or GIC is already zero
+    currentTotalGIC = sumGICSubs(step);
     noMoreMitigation = isempty(candLines) && isempty(candWind);
-    
-    % Condition B: GIC level has reached zero
     gicIsZero = (currentTotalGIC <= 0);
-    
+
     if noMoreMitigation || gicIsZero
         if noMoreMitigation
-            app.StatusTextArea.Value = [app.StatusTextArea.Value;'Stopping: No further mitigations available.\n'];
+            msg = 'Stopping: No further mitigations available';
         else
-            app.StatusTextArea.Value = [app.StatusTextArea.Value;'Stopping: GIC has reached zero.\n'];
+            msg = 'Stopping: GIC has reached zero';
         end
+        app.StatusTextArea.Value = [app.StatusTextArea.Value; msg];
+        drawnow;
         break;
     end
 
-    %% --------------------------------------------------
-    %  PICK WORST GIC ELEMENT AMONG CANDIDATES
-    % ---------------------------------------------------
+    % Pick worst eligible element
     [type, idx, val] = selectWorstGICElement(GIC_current, candLines, candWind);
 
-    % Safety check
     if isempty(type) || isnan(val)
-        app.StatusTextArea.Value = [app.StatusTextArea.Value;'No valid candidate found (likely all NaN). Stopping.\n'];
+        msg = 'Stopping: No valid candidate found';
+        app.StatusTextArea.Value = [app.StatusTextArea.Value; msg];
+        drawnow;
         break;
     end
 
-
-    %% --------------------------------------------------
-    %  APPLY THE MITIGATION
-    % ---------------------------------------------------
+    % Apply one mitigation
     [app, lineOpen, windingBlocked, description] = ...
         applyMitigationToNetwork(app, type, idx, lineOpen, windingBlocked);
 
-    mitigations{step+1} = description;    
-    app.StatusTextArea.Value{end+1} = description;    
+    rowIdx = step + 1;
+    mitigations{rowIdx} = description;
+    app.StatusTextArea.Value = [app.StatusTextArea.Value; description];
     drawnow;
-    app.StatusTextArea.Value = [app.StatusTextArea.Value;'%s\n', description];
 
-
-    %% --------------------------------------------------
-    %  RE-RUN GIC SIMULATION AFTER THE CHANGE
-    % ---------------------------------------------------
+    % Re-run simulation after network update
     [~, ~, ~, GIC_current] = runGIC_now(app);
 
+    % Updated total substation GIC
+    subsAbsN = abs(GIC_current.Subs);
+    totPerTN = sum(subsAbsN, 1, 'omitnan');
+    sumN     = max(totPerTN, [], 'omitnan');
 
-    %% --------------------------------------------------
-    %  COMPUTE METRICS FOR THIS STEP 
-    % ---------------------------------------------------
-    subsAbs  = abs(GIC_current.Subs);
-    totPerT  = sum(subsAbs,1,'omitnan');
-    sumN     = max(totPerT);
+    % Updated max transformer value and name
+    if isfield(GIC_current, 'Trans') && ~isempty(GIC_current.Trans)
+        transAbsN = abs(GIC_current.Trans);
+        [maxTN, linIdxTN] = max(transAbsN, [], 'all', 'omitnan');
 
-    if isfield(GIC_current,'Trans')
-        transAbs = abs(GIC_current.Trans);
-        maxTN    = max(transAbs,[],'all','omitnan');
+        if isempty(maxTN) || isnan(maxTN)
+            maxTN = 0;
+            maxTransNameN = "None";
+        else
+            [transIdxN, windIdxN] = ind2sub(size(transAbsN), linIdxTN);
+            if isfield(app.T(transIdxN), 'Name')
+                maxTransNameN = string(app.T(transIdxN).Name) + " (W" + string(windIdxN) + ")";
+            else
+                maxTransNameN = "Transformer " + string(transIdxN) + " (W" + string(windIdxN) + ")";
+            end
+        end
     else
         maxTN = 0;
+        maxTransNameN = "None";
     end
 
-    if isfield(GIC_current,'Lines')
-        linesAbs = abs(GIC_current.Lines);
-        maxLN    = max(linesAbs,[],'all','omitnan');
+    % Updated max line value and name
+    if isfield(GIC_current, 'Lines') && ~isempty(GIC_current.Lines)
+        linesAbsN = abs(GIC_current.Lines);
+        [maxLN, linIdxLN] = max(linesAbsN, [], 'all', 'omitnan');
+
+        if isempty(maxLN) || isnan(maxLN)
+            maxLN = 0;
+            maxLineNameN = "None";
+        else
+            [lineIdxN, ~] = ind2sub(size(linesAbsN), linIdxLN);
+            if isfield(app.L(lineIdxN), 'Name')
+                maxLineNameN = string(app.L(lineIdxN).Name);
+            else
+                maxLineNameN = "Line " + string(lineIdxN);
+            end
+        end
     else
         maxLN = 0;
+        maxLineNameN = "None";
     end
 
+    % Store updated step results
+    sumGICSubs(rowIdx)   = sumN;
+    maxTransGIC(rowIdx)  = maxTN;
+    maxLinesGIC(rowIdx)  = maxLN;
+    maxTransName(rowIdx) = maxTransNameN;
+    maxLineName(rowIdx)  = maxLineNameN;
 
+    % Log to app
+    stepMsg = sprintf('Step %d -> TotalGIC = %.2f | MaxTrans = %.2f [%s] | MaxLine = %.2f [%s]', ...
+        step, sumN, maxTN, char(maxTransNameN), maxLN, char(maxLineNameN));
+    app.StatusTextArea.Value = [app.StatusTextArea.Value; stepMsg];
 
-    sumGICSubs(step+1)  = sumN;
-    maxTransGIC(step+1) = maxTN;
-    maxLinesGIC(step+1) = maxLN;
+    % Append row to app table
+    newRow = table( ...
+        string(description), ...
+        maxTN, ...
+        maxTransNameN, ...
+        sumN, ...
+        maxLN, ...
+        maxLineNameN, ...
+        'VariableNames', app.MitigationResults.Properties.VariableNames);
 
-    app.StatusTextArea.Value = [app.StatusTextArea.Value;'Step %d → TotalGIC = %.2f, MaxTrans = %.2f\n\n', step, sumN, maxTN];
+    app.MitigationResults = [app.MitigationResults; newRow];
+    app.SpreadsheetTable.Data = app.MitigationResults;
+    drawnow;
 
+    % Advance step
     step = step + 1;
 end
 
-
-%% --------------------------------------------------
-%  PACKAGE RESULTS
-% ---------------------------------------------------
+%% Package outputs
 results.sumGICSubs     = sumGICSubs;
 results.maxTransGIC    = maxTransGIC;
 results.maxLinesGIC    = maxLinesGIC;
+results.maxTransName   = maxTransName;
+results.maxLineName    = maxLineName;
 results.mitigations    = mitigations;
 results.lineOpen       = lineOpen;
 results.windingBlocked = windingBlocked;
 results.parallelGroups = parallelGroups;
 results.modeStr        = modeStr;
 
-% Save results to a .mat file
-save('mitigation_results.mat', 'mitigations', 'sumGICSubs', 'maxTransGIC', 'maxLinesGIC');
+%% Save and plot
+save('mitigation_results.mat', ...
+    'mitigations', 'sumGICSubs', 'maxTransGIC', 'maxLinesGIC', ...
+    'maxTransName', 'maxLineName');
 
-%% --------------------------------------------------
-%  AUTO-PLOT RESULTS
-% ---------------------------------------------------
 plotGICMitigationResults(results);
 
 end

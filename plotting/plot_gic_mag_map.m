@@ -15,214 +15,193 @@ function plot_gic_mag_map(app, S, L, tind, b, GIC, timeInput, mode)
 %   1. 'Max GIC'     - Peak GIC magnitude per substation (edited network)
 %   2. 'GIC Change'  - Peak difference between edited and original GIC
 %   3. 'Snapshot'    - GIC values at a specific timeIndex
-% =========================================================================
-
-    % === Time Index Handling (Clamp to valid range) ===
-    if nargin <7 || isempty(timeInput)
-        [~, timeIndex] = max(max(abs(GIC.Subs), [], 1));
-    elseif isdatetime(timeInput)
-        tvec = b(1).times(tind);
-        [~, timeIndex] = min(abs(tvec - timeInput));
-    else
-        timeIndex = timeInput;
-    end
-
-    % Clamp tind to available range
-    timeIndex = max(1, min(timeIndex, size(GIC.Subs, 2)));
-
-    switch mode
-        case {'Max GIC', 'GIC Change', 'Snapshot'}
-            % === Substation Coordinates ===
-            subLoc = reshape([S(:).Loc], 2, []).';
-            subLat = subLoc(:,1);
-            subLon = subLoc(:,2);
-
-            % === Magnetometer Coordinates ===
-            magLat = [S(:).Latitude];
-            magLon = [S(:).Longitude];
-
-            % === Map Limits ===
-            latLim = [min(subLat), max(subLat)];
-            lonLim = [min(subLon), max(subLon)];
-            latPad = 0.1 * diff(latLim); lonPad = 0.1 * diff(lonLim);
-            latLim = latLim + [-latPad latPad];
-            lonLim = lonLim + [-lonPad lonPad];
-            
-
-            % === Initialize Map ===
-            figure;
-            worldmap(latLim, lonLim);
-            setm(gca,'FontSize',12);
-            hold on;
-
-            % === Background Map (Optional Shapefiles) ===
-            try
-                provinces = shaperead('province.shp','UseGeoCoords',true);
-                geoshow(provinces,'DisplayType','polygon','DefaultFaceColor',[0.9 1 0.7],'EdgeColor','black');
-            end
-            try
-                states = shaperead('usastatehi','UseGeoCoords',true);
-                geoshow(states,'DisplayType','polygon','DefaultFaceColor',[0.9 1 0.7],'EdgeColor','black');
-            end
-
-            % === Plot Transmission Lines ===
-            for k = 1:numel(L)
-                lat = L(k).Loc(:,1);
-                lon = L(k).Loc(:,2);
-                tcolor = 'k';
-                if isfield(L(k), 'Voltage') && L(k).Voltage >= 400
-                    tcolor = 'b';
-                end
-                plotm(lat, lon, '-', 'Color', tcolor, 'LineWidth', 1.5);
-            end
-            
-            % === Determine Current Data Based on GIC Values ===
-            if any(isnan(GIC.Subs), 'all')
-                currentData = GIC.Original_Subs;
-            else
-                currentData = GIC.Subs;
-            end
-            % === GIC Bubble Mode Selector ===
-            switch mode
-                case 'Max GIC'
-                    [~, idxMax] = max(abs(currentData), [], 2);
-                    gicVals = arrayfun(@(i) currentData(i, idxMax(i)), 1:size(currentData,1))';
-                    cVals = gicVals;
-                    titleStr = 'Max GIC Magnitude (All Time)';
-
-                case 'GIC Change'
-                    % Compute difference over time
-                    gicDiff = abs(currentData) - abs(GIC.Original_Subs);                
-                    % Find index of max absolute change for each substation
-                    [~, idxMaxDiff] = max(abs(gicDiff), [], 2);                
-                    % Extract signed change at that peak difference time
-                    gicVals = arrayfun(@(i) gicDiff(i, idxMaxDiff(i)), 1:size(gicDiff,1))';                
-                    cVals = gicVals;
-                    titleStr = 'Max GIC Change (Edited - Original)';
-
-                    % Call the local function to perform ranking and printing
-                    rankSubstationsByChange(S, GIC, gicDiff, idxMaxDiff);
-
-                    % Continue with plotting using gicVals/cVals/titleStr already set
-
-                case 'Snapshot'
-                    gicVals = currentData(:, timeIndex);
-                    cVals = gicVals;
-                    peakTime = b(1).times(tind(timeIndex));
-                    titleStr = ['GIC Map Snapshot @ ', char(peakTime)];
-            end
-
-
-            % === Plot Substation GIC as bubbles ===
-            scatterm(subLat, subLon, 30 + 30*abs(gicVals), cVals, ...
-                'filled', 'MarkerEdgeColor', 'k');
-            cb = colorbar;
-            cb.Label.String = 'GIC (A)';
-            colormap(redblue(3));
-            % Center colormap on zero by setting symmetric color axis around max absolute value
-            maxAbs = max(abs(cVals(:)));
-            if ~isempty(maxAbs) && isfinite(maxAbs) && maxAbs > 0
-                caxis([-maxAbs maxAbs]);
-            else
-                caxis([-1 1]); % fallback to avoid degenerate colormap
-            end
-                        
-
-            
-            % === Plot Substation Names ===
-            % for i = 1:numel(S)
-            %     textm(subLat(i), subLon(i), S(i).Name, 'FontSize', 5, ...
-            %         'VerticalAlignment', 'bottom', 'Color', 'red', 'FontWeight', 'bold');
-            % end
-
-            % === Magnetic Field Vectors ===
-            % refScale = 500;
-            % for k = 1:numel(b)
-            %     if numel(b(k).x) >= timeIndex
-            %         bx = b(k).x(timeIndex);
-            %         by = b(k).y(timeIndex);
-            %     else
-            %         bx = 0; by = 0;
-            %     end
-            %     quivermc(magLat(k), magLon(k), by, bx, 'color','r', ...
-            %         'reference', refScale, 'arrowstyle','tail', 'linewidth', 1.5);
-            %     textm(magLat(k), magLon(k), b(k).site, 'FontSize', 8, ...
-            %         'VerticalAlignment', 'bottom');
-            % end
-
-            % === Plot Cities ===
-            cities = {
-                'Edmonton',      53.5461, -113.4938;
-                'Calgary',       51.0477, -114.0719;
-                'Red Deer',      52.2681, -113.8112;
-                'Fort McMurray', 56.7267, -111.3790;
-                'Lethbridge',    49.6942, -112.8328;
-                'Medicine Hat',  50.0405, -110.6765;
-            };
-            for i = 1:size(cities,1)
-                plotm(cities{i,2}, cities{i,3}, 'sk', 'MarkerFaceColor', 'b');
-                textm(cities{i,2}, cities{i,3}, cities{i,1}, ...
-                    'FontSize', 8, 'VerticalAlignment', 'top');
-            end
-
-            title(titleStr, 'FontSize', 14);
-            hold off;
-
-
-        otherwise
-            error('Unknown mode: %s', mode);
-    end
+%
+% Creates two separate plots for each choice:
+%   1. Full Alberta GIC map with automatic limits and no E-field
+%   2. Close-up GIC map with user-defined focus and E-field overlay
+    % === Time index handling ===
+if isempty(timeInput)
+    [~, timeIndex] = max(max(abs(GIC.Subs), [], 1));
+elseif isdatetime(timeInput)
+    tvec = b(1).times(tind);
+    [~, timeIndex] = min(abs(tvec - timeInput));
+else
+    timeIndex = timeInput;
 end
 
+% === Clamp time index to valid GIC range ===
+timeIndex = max(1, min(timeIndex, size(GIC.Subs, 2)));
 
+switch mode
+    case {'Max GIC', 'GIC Change', 'Snapshot'}
 
+        % === Extract substation coordinates ===
+        subLoc = reshape([S(:).Loc], 2, []).';
+        subLat = subLoc(:,1);
+        subLon = subLoc(:,2);
 
+        % === Automatic Alberta limits ===
+        latLimFull = [min(subLat), max(subLat)];
+        lonLimFull = [min(subLon), max(subLon)];
+        latPad = 0.1 * diff(latLimFull);
+        lonPad = 0.1 * diff(lonLimFull);
 
+        latLimFull = latLimFull + [-latPad, latPad];
+        lonLimFull = lonLimFull + [-lonPad, lonPad];
 
+        % === Default close-up limits start as full limits ===
+        latLimClose = latLimFull;
+        lonLimClose = lonLimFull;
 
+        % === Ask user for close-up focus ===
+        promptTitle = 'Map Focus Options';
+        prompt = {'centerLat (deg)','centerLon (deg)','latPad (deg)','lonPad (deg)'};
+        opts.WindowStyle = 'modal';
+        answer = inputdlg(prompt, promptTitle, 1, {'53','-113','1','4'}, opts);
 
+        if ~isempty(answer)
+            centerLat = str2double(answer{1});
+            centerLon = str2double(answer{2});
+            padDegLat = str2double(answer{3});
+            padDegLon = str2double(answer{4});
 
-
-% === Rank Substations by Change and Print Percentages ===
-function rankSubstationsByChange(S, GIC, gicDiff, idxMaxDiff)
-    % RANKSUBSTATIONSBYCHANGE Print ranked substations by peak GIC change and percentage.
-    %   S               - struct array of substations with field Name
-    %   GIC             - struct with Original_Subs (n x t)
-    %   gicDiff         - n x t matrix of (abs(current)-abs(original)) with sign preserved
-    %   idxMaxDiff      - n x 1 indices of time of peak absolute change per substation
-
-    % Compute signed peak change per substation (at its peak-diff time)
-    n = size(gicDiff,1);
-    peakChange = arrayfun(@(i) gicDiff(i, idxMaxDiff(i)), 1:n)';
-
-    % Absolute change for ranking
-    absChange = abs(peakChange);
-
-    % Original magnitude at the same peak time (absolute)
-    origAtPeak = arrayfun(@(i) abs(GIC.Original_Subs(i, idxMaxDiff(i))), 1:n)';
-
-    % Percentage change: handle zeros in original
-    pctChange = zeros(n,1);
-    nz = origAtPeak ~= 0;
-    pctChange(nz) = 100 * (absChange(nz) ./ origAtPeak(nz));
-    pctChange(~nz & absChange>0) = Inf; % indicate infinite percent change
-
-    % Prepare names and sort by absolute change descending
-    names = {S(:).Name}';
-    [sortedAbsChange, sortIdx] = sort(absChange, 'descend');
-    sortedNames = names(sortIdx);
-    sortedPct = pctChange(sortIdx);
-    sortedSignedChange = peakChange(sortIdx);
-
-    % Display ranked list in Command Window
-    fprintf('\nRanked Substations by Peak GIC Change (Edited - Original):\n');
-    fprintf('%3s  %-30s  %14s  %12s  %8s\n', '#','Substation','Signed Change (A)','Change (A)','Change (%)');
-    for kk = 1:numel(sortedNames)
-        if isinf(sortedPct(kk))
-            pctStr = 'Inf (orig 0)';
-        else
-            pctStr = sprintf('%.1f%%', sortedPct(kk));
+            if ~(isnan(centerLat) || isnan(centerLon) || isnan(padDegLat) || isnan(padDegLon) || padDegLat < 0 || padDegLon < 0)
+                latLimClose = centerLat + [-padDegLat, padDegLat];
+                lonLimClose = centerLon + [-padDegLon, padDegLon];
+            else
+                warning('Invalid focus point inputs. Using automatic limits for close-up map.');
+            end
         end
-        fprintf('%3d  %-30s  %14.1f  %12.1f  %8s\n', kk, sortedNames{kk}, sortedSignedChange(kk), sortedAbsChange(kk), pctStr);
+
+        % === Determine current GIC data source ===
+        if any(isnan(GIC.Subs), 'all')
+            currentData = GIC.Original_Subs;
+        else
+            currentData = GIC.Subs;
+        end
+
+        % === Select GIC values based on mode ===
+        switch mode
+            case 'Max GIC'
+                [~, idxMax] = max(abs(currentData), [], 2);
+                gicVals = arrayfun(@(i) currentData(i, idxMax(i)), 1:size(currentData,1))';
+                cVals = gicVals;
+                titleStr = 'Max GIC Magnitude (All Time)';
+
+            case 'GIC Change'
+                gicDiff = abs(currentData) - abs(GIC.Original_Subs);
+                [~, idxMaxDiff] = max(abs(gicDiff), [], 2);
+                gicVals = arrayfun(@(i) gicDiff(i, idxMaxDiff(i)), 1:size(gicDiff,1))';
+                cVals = gicVals;
+                titleStr = 'Max GIC Change (Edited - Original)';
+
+            case 'Snapshot'
+                gicVals = currentData(:, timeIndex);
+                cVals = gicVals;
+                peakTime = b(1).times(tind(timeIndex));
+                titleStr = ['GIC Map Snapshot @ ', char(peakTime)];
+        end
+
+        % === Plot 1: Full Alberta map (no E-field) ===
+        figure;
+        worldmap(latLimFull, lonLimFull);
+        setm(gca, 'FontSize', 12);
+        hold on;
+
+        drawBaseMapAndData(L, subLat, subLon, gicVals, cVals, "geoshow");
+
+        title([titleStr, ' - Full Alberta'], 'FontSize', 14);
+        hold off;
+
+        % === Plot 2: Close-up map (with E-field) ===
+        figure;
+        worldmap(latLimClose, lonLimClose);
+        hold on;
+        
+        [A, RA] = readBasemapImage("streets", latLimClose, lonLimClose);
+        [xGrid, yGrid] = worldGrid(RA);
+        [latGrid, lonGrid] = projinv(RA.ProjectedCRS, xGrid, yGrid);
+        geoshow(latGrid, lonGrid, A)
+
+
+        drawBaseMapAndData(L, subLat, subLon, gicVals, cVals , "real");
+
+        % === Overlay E-field only on close-up map ===
+        emaxT = plotEfield(app, b, subLat, subLon);
+
+        title([titleStr, ' - Close-Up with E-Field at ', emaxT], 'FontSize', 14);
+        
+        hold off;
+
+    otherwise
+        error('Unknown mode: %s', mode);
+end
+end
+   
+
+function drawBaseMapAndData(L, subLat, subLon, gicVals, cVals,type)
+% =========================================================================
+% DRAWBASEMAPANDDATA
+% Draws provinces/states, transmission lines, substations, and cities.
+% =========================================================================    
+    % Only draw background polygons when using 'geoshow' mode
+    if strcmpi(string(type), "geoshow")
+        try
+            provinces = shaperead('province.shp', 'UseGeoCoords', true);
+            geoshow(provinces, 'DisplayType', 'polygon', ...
+                'DefaultFaceColor', [0.9 1 0.7], 'EdgeColor', 'black');
+        end
+
+        try
+            states = shaperead('usastatehi', 'UseGeoCoords', true);
+            geoshow(states, 'DisplayType', 'polygon', ...
+                'DefaultFaceColor', [0.9 1 0.7], 'EdgeColor', 'black');
+        end
+    end
+
+    % === Transmission lines ===
+    for k = 1:numel(L)
+        lat = L(k).Loc(:,1);
+        lon = L(k).Loc(:,2);
+
+        lineColor = 'r';
+        if isfield(L(k), 'Voltage') && L(k).Voltage >= 400
+            lineColor = 'b';
+        end
+
+        plotm(lat, lon, '-', 'Color', lineColor, 'LineWidth', 1.5);
+    end
+
+    % === Substation bubbles ===
+    scatterm(subLat, subLon, 30 + 30*abs(gicVals), cVals, ...
+        'filled', 'MarkerEdgeColor', 'k');
+
+    cb = colorbar;
+    cb.Label.String = 'GIC (A)';
+    colormap(redblue(10));
+
+    % === Symmetric color scaling ===
+    maxAbs = max(abs(cVals(:)));
+    if ~isempty(maxAbs) && isfinite(maxAbs) && maxAbs > 0
+        caxis([-maxAbs maxAbs]);
+    else
+        caxis([-1 1]);
+    end
+
+    % === Cities ===
+    cities = {
+        'Edmonton',      53.5461, -113.4938;
+        'Calgary',       51.0477, -114.0719;
+        'Red Deer',      52.2681, -113.8112;
+        'Fort McMurray', 56.7267, -111.3790;
+        'Lethbridge',    49.6942, -112.8328;
+        'Medicine Hat',  50.0405, -110.6765;
+    };
+
+    for i = 1:size(cities,1)
+        plotm(cities{i,2}, cities{i,3}, 'sk', 'MarkerFaceColor', 'b');
+        textm(cities{i,2}, cities{i,3}, cities{i,1}, ...
+            'FontSize', 8, 'VerticalAlignment', 'top');
     end
 end
+

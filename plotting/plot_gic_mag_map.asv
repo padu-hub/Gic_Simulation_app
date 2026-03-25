@@ -18,7 +18,7 @@ function plot_gic_mag_map(app, S, L, tind, b, GIC, timeInput, mode)
 % =========================================================================
 
     % === Time Index Handling (Clamp to valid range) ===
-    if nargin <7 || isempty(timeInput)
+    if margin <7 || isempty(timeInput)
         [~, timeIndex] = max(max(abs(GIC.Subs), [], 1));
     elseif isdatetime(timeInput)
         tvec = b(1).times(tind);
@@ -47,13 +47,38 @@ function plot_gic_mag_map(app, S, L, tind, b, GIC, timeInput, mode)
             latPad = 0.1 * diff(latLim); lonPad = 0.1 * diff(lonLim);
             latLim = latLim + [-latPad latPad];
             lonLim = lonLim + [-lonPad lonPad];
-            
 
+            
+            % === Optional: override map limits using user-specified focus point ===
+            % Popup to ask for optional focus point (centerLat, centerLon, latPadDeg, lonPadDeg) ===
+            promptTitle = 'Map Focus Options';
+            prompt = {'centerLat (deg)','centerLon (deg)','latPad (deg)','lonPad (deg)'};
+            opts.WindowStyle = 'modal';
+            answer = inputdlg(prompt, promptTitle, 1, {'','','0.1','0.1'}, opts);
+            
+            if ~isempty(answer)
+                centerLat = str2double(answer{1});
+                centerLon = str2double(answer{2});
+                padDegLat = str2double(answer{3});
+                padDegLon = str2double(answer{4});
+                if isnan(centerLat) || isnan(centerLon) || isnan(padDegLat) || isnan(padDegLon) || padDegLat < 0 || padDegLon < 0
+                    warning('Invalid focus point inputs. Using automatic limits based on substations.');
+                else
+                    latLim = centerLat + [-padDegLat padDegLat];
+                    lonLim = centerLon + [-padDegLon padDegLon];
+                end
+            end
+            
             % === Initialize Map ===
             figure;
             worldmap(latLim, lonLim);
             setm(gca,'FontSize',12);
             hold on;
+
+            % === Plot E-field overlay on close-up map ===
+            plotEfield(app, b, subLat, subLon);                      
+
+
 
             % === Background Map (Optional Shapefiles) ===
             try
@@ -118,9 +143,16 @@ function plot_gic_mag_map(app, S, L, tind, b, GIC, timeInput, mode)
                 'filled', 'MarkerEdgeColor', 'k');
             cb = colorbar;
             cb.Label.String = 'GIC (A)';
-            colormap jet;
-            
-
+            colormap(redblue(3));
+            % Center colormap on zero by setting symmetric color axis around max absolute value
+            maxAbs = max(abs(cVals(:)));
+            if ~isempty(maxAbs) && isfinite(maxAbs) && maxAbs > 0
+                caxis([-maxAbs maxAbs]);
+            else
+                caxis([-1 1]); % fallback to avoid degenerate colormap
+            end
+                        
+    end
             
             % === Plot Substation Names ===
             % for i = 1:numel(S)
@@ -164,7 +196,8 @@ function plot_gic_mag_map(app, S, L, tind, b, GIC, timeInput, mode)
 
         otherwise
             error('Unknown mode: %s', mode);
-    end
+            
+           end
 end
 
 
@@ -218,4 +251,14 @@ function rankSubstationsByChange(S, GIC, gicDiff, idxMaxDiff)
         end
         fprintf('%3d  %-30s  %14.1f  %12.1f  %8s\n', kk, sortedNames{kk}, sortedSignedChange(kk), sortedAbsChange(kk), pctStr);
     end
+end
+
+% necessary to expose outside this function.
+function [latL, lonL] = focus_limits(lat, lon, pad)
+    if nargin < 3 || isempty(pad) || ~isfinite(pad)
+        pad = 0.5;
+    end
+    pad = abs(pad);
+    latL = [lat - pad, lat + pad];
+    lonL = [lon - pad, lon + pad];
 end
