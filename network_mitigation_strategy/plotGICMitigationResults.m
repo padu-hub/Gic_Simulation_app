@@ -17,8 +17,9 @@ function plotGICMitigationResults(results)
     plot(x, results.sumGICSubs, '-', 'LineWidth', 2, 'MarkerSize', 5, 'MarkerFaceColor', 'auto');
     grid on;
     xlabel('Number of Mitigations Applied');
-    ylabel('Max Total Substation GIC (A)');
-    title(sprintf('Total GIC vs Mitigations (%s)', results.modeStr));
+    ylabel('Total Substation GIC Sum (A/phase)');
+    %title(sprintf('Total GIC vs Mitigations (%s)', results.modeStr));
+    title(sprintf('Total GIC vs Mitigations (Lines Open)'));
     set(gca,'FontSize',12);
 
     % ---------- Plot 2: Max Transformer GIC ------------------
@@ -31,8 +32,9 @@ function plotGICMitigationResults(results)
     hold off;
     grid on;
     xlabel('Number of Mitigations Applied');
-    ylabel('Max Transformer GIC (A)');
-    title(sprintf('Max Transformer GIC vs Mitigations (%s)', results.modeStr));
+    ylabel('Max Transformer GIC (A/phase)');
+    %title(sprintf('Max Transformer GIC vs Mitigations (%s)', results.modeStr));
+    title(sprintf('Max Transformer GIC vs Mitigations (Lines open)'));
     set(gca,'FontSize',12);
 
     
@@ -47,7 +49,8 @@ function plotGICMitigationResults(results)
     grid on;
     xlabel('Number of Mitigations Applied');
     ylabel('Max Line GIC (A)');
-    title(sprintf('Max Line GIC vs Mitigations (%s)', results.modeStr));
+    %title(sprintf('Max Line GIC vs Mitigations (%s)', results.modeStr));
+    title(sprintf('Max Line GIC vs Mitigations (Lines Open)'));
     set(gca,'FontSize',12);
 
 end

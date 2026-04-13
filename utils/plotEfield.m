@@ -24,7 +24,6 @@ end
 emaxT = '';
 if exist('b','var') && ~isempty(b) && isfield(b(1),'times')
     % Determine which element of b contains times for this dataset.
-    % If multiple b entries, assume times are same for all and use first.
     times = b(1).times;
     if numel(times) >= idx
         ti = times(idx);
@@ -43,23 +42,8 @@ end
 ex_t = ex(idx,:);
 ey_t = ey(idx,:);
 
-% --- Coordinates ---
-if isprop(app,'latq') && isprop(app,'lonq') && ~isempty(app.latq)
-    lat = app.latq(:);
-    lon = app.lonq(:);
-else
-    lat = subLat(:);
-    lon = subLon(:);
-end
-
-% --- Match sizes (simple version) ---
-n = numel(ex_t);
-if numel(lat) ~= n
-    lat = lat(1) * ones(n,1);
-    lon = lon(1) * ones(n,1);
-end
-
 % --- Plot (north = ey, east = ex) ---
-quiverm(lat, lon, ey_t(:), ex_t(:), 'r', 'AutoScale','on','LineWidth',1.5);
+quiverm(app.latq, app.lonq, ex_t(:), ey_t(:), 'r', 'AutoScale','on','LineWidth',1.5);
+
 
 end

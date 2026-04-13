@@ -26,7 +26,7 @@ switch modeStr
         activeLineMitigation    = true;
         activeWindingMitigation = true;
         lineMode    = 'parallel';
-        windingMode = 'autoW2';
+        windingMode = 'all';
 
     case 'windings_only'
         activeLineMitigation    = false;
@@ -59,6 +59,7 @@ if strcmp(lineMode, 'parallel')
 else
     parallelGroups = {};
 end
+
 
 isAuto = arrayfun(@(t) ...
     (isfield(t,'HV_Type') && strcmpi(t.HV_Type,'auto')) || ...
@@ -172,8 +173,9 @@ while true
                         candLines = [candLines; alive(:)];
                     end
                 end
-                candLines = unique(candLines);
-
+            %     candLines = unique(candLines);
+            % case 'allLines_rankedBased'
+            %     grp
             case 'allLines'
                 candLines = find(~lineOpen);
 
@@ -224,7 +226,7 @@ while true
     % Stop if nothing remains or GIC is already zero
     currentTotalGIC = sumGICSubs(step);
     noMoreMitigation = isempty(candLines) && isempty(candWind);
-    gicIsZero = (currentTotalGIC <= 0);
+    gicIsZero = (currentTotalGIC <= 50);
 
     if noMoreMitigation || gicIsZero
         if noMoreMitigation

@@ -49,15 +49,15 @@ switch mode
         latLimFull = latLimFull + [-latPad, latPad];
         lonLimFull = lonLimFull + [-lonPad, lonPad];
 
-        % === Default close-up limits start as full limits ===
-        latLimClose = latLimFull;
-        lonLimClose = lonLimFull;
+        % % === Default close-up limits start as full limits ===
+        % latLimClose = latLimFull;
+        % lonLimClose = lonLimFull;
 
         % === Ask user for close-up focus ===
         promptTitle = 'Map Focus Options';
         prompt = {'centerLat (deg)','centerLon (deg)','latPad (deg)','lonPad (deg)'};
         opts.WindowStyle = 'modal';
-        answer = inputdlg(prompt, promptTitle, 1, {'53','-113','1','4'}, opts);
+        answer = inputdlg(prompt, promptTitle, 1, {'53.5','-113.5','0.5','2'}, opts);
 
         if ~isempty(answer)
             centerLat = str2double(answer{1});
@@ -117,7 +117,7 @@ switch mode
         figure;
         worldmap(latLimClose, lonLimClose);
         hold on;
-        
+
         [A, RA] = readBasemapImage("streets", latLimClose, lonLimClose);
         [xGrid, yGrid] = worldGrid(RA);
         [latGrid, lonGrid] = projinv(RA.ProjectedCRS, xGrid, yGrid);
@@ -129,7 +129,7 @@ switch mode
         % === Overlay E-field only on close-up map ===
         emaxT = plotEfield(app, b, subLat, subLon);
 
-        title([titleStr, ' - Close-Up with E-Field at ', emaxT], 'FontSize', 14);
+        title([titleStr, '- Close-Up with E-Field at ', emaxT], 'FontSize', 14);
         
         hold off;
 
@@ -178,7 +178,7 @@ function drawBaseMapAndData(L, subLat, subLon, gicVals, cVals,type)
 
     cb = colorbar;
     cb.Label.String = 'GIC (A)';
-    colormap(redblue(10));
+    colormap(redblue(20));
 
     % === Symmetric color scaling ===
     maxAbs = max(abs(cVals(:)));
