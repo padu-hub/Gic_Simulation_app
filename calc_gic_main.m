@@ -1,4 +1,4 @@
-function [S, L, T, GIC, subLoc, nLines, nSubs, nTrans] = calc_gic_main(app, S, L, T, ex, ey, latq, lonq, tind, uniform, OriginalL, OriginalT)
+function [S, L, T, GIC, subLoc, nLines, nSubs, nTrans] = calc_gic_main(app, S, L, T, ex, ey, latq, lonq, tind, OriginalL, OriginalT)
 % =======================================================================
 % CALC_GIC_MAIN
 % Computes GIC for edited and original networks
@@ -21,15 +21,16 @@ needOriginal = ...
 app.StatusTextArea.Value = [app.StatusTextArea.Value; '************************LINE VOLTAGES****************************'];
 drawnow;
 tic
-if ~uniform
+editedChanged = isNetworkChanged(L, T, OriginalL, OriginalT);
+if ~app.uniform
     V_original = calc_line_voltage(OriginalL, latq, lonq, ex(tind,:), ey(tind,:), 'natural');
-    editedChanged = isNetworkChanged(L, T, OriginalL, OriginalT);
     if editedChanged
         V = calc_line_voltage(L, latq, lonq, ex(tind,:), ey(tind,:), 'natural');
     else
         V = [];
     end
     nTimes = size(V_original, 1);
+
 else
     nTimes = 1;
 end
@@ -46,7 +47,7 @@ drawnow;
 indnull0 = find(diag(Yn0) == 0);
 indnotnull0 = find(diag(Yn0) ~= 0);
 
-if editedChanged
+if editedChanged || uniform
     [nodePairs, nodeRes, ~, edges, indices, neutralNodes, autoind, nBus] = get_nodePairs(L, T, S);
     [Yn, Ye] = calc_admittance_matrices(edges, indices, nodeRes, neutralNodes, S, nBus);
     indnull = find(diag(Yn) == 0);
@@ -70,6 +71,15 @@ milestones = [10, 25, 50, 70, 100];
 loggedPercents = false(size(milestones));
 
 % === Run GIC Calculation Loop ===
+if app.uniform
+    x = 1/sqrt(2);     % east
+    y = -1/sqrt(2);    % south
+    Vu = calc_line_voltage_uniform(x,y,L,S);
+    
+    [GIC_Subs, GIC_Lines, GIC_Trans] = ...
+        calc_gic(L,T,Vu,Yn,Ye,nodePairs,nodeRes,autoind,indices,edges, ...
+             indnull,indnotnull,nBus);      
+else
 for i = 1:nTimes
     % --- Original GIC ---
     if needOriginal
@@ -103,6 +113,7 @@ for i = 1:nTimes
             loggedPercents(m) = true;
         end
     end
+end
 end
 toc
 elapsedTime = toc; % Get the elapsed time from the previous tic
