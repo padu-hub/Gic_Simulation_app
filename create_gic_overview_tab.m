@@ -158,18 +158,22 @@ function create_gic_overview_tab(app, S, L, T,  b, GIC, tind, timeInput)
             Axes.XTick = [1, 2];
             Axes.XTickLabel = {'Edited', 'Original'};
             ylim(Axes, 'auto');
+            grid(Axes, 'on');
+            hold(Axes, 'off');    
+
         else
             % Plot both y1 and y2, excluding NaN values
             plot(Axes, timeVec(~isnan(y1)), y1(~isnan(y1)), 'r-', 'LineWidth', 1.5, 'DisplayName', 'Edited');
             hold(Axes, 'on');
             plot(Axes, timeVec(~isnan(y2)), y2(~isnan(y2)), 'b-', 'LineWidth', 1.5, 'DisplayName', 'Original');
-            hold(Axes, 'off');      
-            % Update axes properties
-            title(Axes, sprintf('GIC Time Series for %s (%s)', name, type));
+            hold(Axes, 'off');
+            
             xlabel(Axes, 'Time');
-            ylabel(Axes, 'GIC Value');
-            legend(Axes, 'show');
+            ylabel(Axes, 'GIC Value (A/phase)');
+            lg = legend(Axes, 'show');     
             ylim(Axes, 'auto');
+            Axes.XGrid = 'on';
+            Axes.YGrid = 'on';
                     
         end
         addGraphToStorage(app, Axes, sprintf('GIC @ %s (%s)', name, type));
@@ -222,3 +226,4 @@ function create_gic_overview_tab(app, S, L, T,  b, GIC, tind, timeInput)
     btn.ButtonPushedFcn = @(~,~) draw_schematic(b, displayOptionsDropdown.Value, dd.Value, find(strcmpi({S.Name}, dd.Value)), ax, L, T, GIC, timeIndex, timeVec);
 
 end
+

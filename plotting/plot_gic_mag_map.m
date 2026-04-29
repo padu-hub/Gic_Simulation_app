@@ -53,25 +53,25 @@ switch mode
         % latLimClose = latLimFull;
         % lonLimClose = lonLimFull;
 
-        % % === Ask user for close-up focus ===
-        % promptTitle = 'Map Focus Options';
-        % prompt = {'centerLat (deg)','centerLon (deg)','latPad (deg)','lonPad (deg)'};
-        % opts.WindowStyle = 'modal';
-        % answer = inputdlg(prompt, promptTitle, 1, {'53.5','-113.5','0.5','2'}, opts);
-        % 
-        % if ~isempty(answer)
-        %     centerLat = str2double(answer{1});
-        %     centerLon = str2double(answer{2});
-        %     padDegLat = str2double(answer{3});
-        %     padDegLon = str2double(answer{4});
-        % 
-        %     if ~(isnan(centerLat) || isnan(centerLon) || isnan(padDegLat) || isnan(padDegLon) || padDegLat < 0 || padDegLon < 0)
-        %         latLimClose = centerLat + [-padDegLat, padDegLat];
-        %         lonLimClose = centerLon + [-padDegLon, padDegLon];
-        %     else
-        %         warning('Invalid focus point inputs. Using automatic limits for close-up map.');
-        %     end
-        % end
+        % === Ask user for close-up focus ===
+        promptTitle = 'Map Focus Options';
+        prompt = {'centerLat (deg)','centerLon (deg)','latPad (deg)','lonPad (deg)'};
+        opts.WindowStyle = 'modal';
+        answer = inputdlg(prompt, promptTitle, 1, {'53.5','-113.5','0.5','2'}, opts);
+
+        if ~isempty(answer)
+            centerLat = str2double(answer{1});
+            centerLon = str2double(answer{2});
+            padDegLat = str2double(answer{3});
+            padDegLon = str2double(answer{4});
+
+            if ~(isnan(centerLat) || isnan(centerLon) || isnan(padDegLat) || isnan(padDegLon) || padDegLat < 0 || padDegLon < 0)
+                latLimClose = centerLat + [-padDegLat, padDegLat];
+                lonLimClose = centerLon + [-padDegLon, padDegLon];
+            else
+                warning('Invalid focus point inputs. Using automatic limits for close-up map.');
+            end
+        end
 
         % === Determine current GIC data source ===
         if any(isnan(GIC.Subs), 'all')
@@ -110,29 +110,36 @@ switch mode
 
         drawBaseMapAndData(L, subLat, subLon, gicVals, cVals, "geoshow");
 
-        title([titleStr, ' - Full Alberta'], 'FontSize', 14);
+        %title([titleStr, ' - Full Alberta'], 'FontSize', 14);
         hold off;
 
         % % === Plot 2: Close-up map (with E-field) ===
-        % figure;
-        % worldmap(latLimClose, lonLimClose);
-        % hold on;
-        % 
-        % [A, RA] = readBasemapImage("streets", latLimClose, lonLimClose);
-        % [xGrid, yGrid] = worldGrid(RA);
-        % [latGrid, lonGrid] = projinv(RA.ProjectedCRS, xGrid, yGrid);
-        % geoshow(latGrid, lonGrid, A)
-        % 
-        % 
-        % drawBaseMapAndData(L, subLat, subLon, gicVals, cVals , "real");
-        % 
-        % % === Overlay E-field only on close-up map ===
-        % emaxT = plotEfield(app, b, subLat, subLon);
-        % 
-        % title([titleStr, '- Close-Up with E-Field at ', emaxT], 'FontSize', 14);
-        % 
-        % hold off;
-
+        if ~isempty(answer)
+            figure;
+            worldmap(latLimClose, lonLimClose);
+            hold on;
+    
+            [A, RA] = readBasemapImage("streets", latLimClose, lonLimClose);
+            [xGrid, yGrid] = worldGrid(RA);
+            [latGrid, lonGrid] = projinv(RA.ProjectedCRS, xGrid, yGrid);
+          
+            geoshow(latGrid, lonGrid, A)
+    
+    
+            drawBaseMapAndData(L, subLat, subLon, gicVals, cVals , "real");
+            
+            % Remove colorbar from the close-up map (second figure)
+            cbClose = findobj(gcf, 'Type', 'ColorBar');
+            if ~isempty(cbClose)
+                delete(cbClose);
+            end
+    
+            % === Overlay E-field only on close-up map ===
+            emaxT = plotEfield(app, b, subLat, subLon);
+    
+            %title([titleStr, '- Close-Up at ', emaxT], 'FontSize', 16);
+            hold off;
+        end
     otherwise
         error('Unknown mode: %s', mode);
 end
@@ -177,7 +184,7 @@ function drawBaseMapAndData(L, subLat, subLon, gicVals, cVals,type)
         'filled', 'MarkerEdgeColor', 'k');
 
     cb = colorbar;
-    cb.Label.String = 'GIC (A)';
+    cb.Label.String = 'GIC (A/phase)';
     colormap(redblue(20));
 
     % === Symmetric color scaling ===

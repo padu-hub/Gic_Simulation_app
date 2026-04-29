@@ -42,7 +42,7 @@ appendStatus(app, '********************NETWORK TOPOLOGY************************'
 indnull0    = find(diag(Yn0) == 0);
 indnotnull0 = find(diag(Yn0) ~= 0);
 
-if editedChanged
+if editedChanged || uniform
     [nodePairs, nodeRes, ~, edges, indices, neutralNodes, autoind, nBus] = get_nodePairs(L, T, S);
     [Yn, Ye] = calc_admittance_matrices(edges, indices, nodeRes, neutralNodes, S, nBus);
     indnull    = find(diag(Yn) == 0);
@@ -66,24 +66,9 @@ if uniform
     x  = 1/sqrt(2);
     y  = -1/sqrt(2);
     Vu = calc_line_voltage_uniform(x, y, L, S);
-    if needOriginal
-        [original_GIC_Subs, original_GIC_Lines, original_GIC_Trans] = ...
-            calc_gic(OriginalL, OriginalT, Vu, Yn0, Ye0, ...
-                nodePairs0, nodeRes0, autoind0, indices0, edges0, ...
-                indnull0, indnotnull0, nBus0);
-    else
-        original_GIC_Subs    = app.gic_originalS;
-        original_GIC_Lines  = app.gic_originalL;
-        original_GIC_Trans = app.gic_originalT;
-    end
-
-    % Edited GIC (containers remain NaN if unchanged)
-    if editedChanged
-        [GIC_Subs, GIC_Lines, GIC_Trans] = ...
-            calc_gic(L, T, Vu, Yn, Ye, nodePairs, nodeRes, autoind, indices, edges, ...
-            indnull, indnotnull, nBus);
-    end
-
+    [GIC_Subs, GIC_Lines, GIC_Trans] = ...
+        calc_gic(L, T, Vu, Yn, Ye, nodePairs, nodeRes, autoind, indices, edges, ...
+        indnull, indnotnull, nBus);
 else
     % Pre-compute which loop indices correspond to each milestone (avoids
     % inner for-loop + round() on every iteration)

@@ -9,419 +9,292 @@ function results = run_random_mitigation(app, ...
     resultType, ...
     target)
 
-    %% -------------------- BASE DATA --------------------
-    % Keep copies of the original network so each random run starts fresh.
+    %% -------------------- PRE-COMPUTATION & CACHING --------------------
     L0 = app.L;
     T0 = app.T;
-
-    % Get basic counts.
     nLines = numel(L0);
     nTrans = numel(T0);
 
-    % Build parallel groups only if needed.
+    % Cache field names to avoid isfield() calls in the loop
+    hasRes = isfield(L0, 'Resistance');
+    hasResKm = isfield(L0, 'ResKm');
+    
+    % Pre-build Parallel Group Map for O(1) lookup
+    lineGroupMap = zeros(nLines, 1);
     if useParallelLines
         parallelGroups = buildParallelGroups(L0);
+        for g = 1:numel(parallelGroups)
+            lineGroupMap(parallelGroups{g}) = g;
+        end
     else
         parallelGroups = {};
     end
 
-    % Detect autotransformers.
-    isAuto = arrayfun(@(t) ...
-        (isfield(t,'HV_Type') && strcmpi(t.HV_Type,'auto')) || ...
-        (isfield(t,'LV_Type') && strcmpi(t.LV_Type,'auto')), ...
-        T0);
-
-    % Detect grounded-wye windings.
+    % Detect equipment types (Vectorized)
+    isAuto = arrayfun(@(t) (isfield(t,'HV_Type') && strcmpi(t.HV_Type,'auto')) || ...
+                           (isfield(t,'LV_Type') && strcmpi(t.LV_Type,'auto')), T0);
     windingIsWye = getWyeGroundedWindings(T0);
     bothWye = windingIsWye(:,1) & windingIsWye(:,2);
 
-    % Build a simple high-voltage mask if the field exists.
-    % Edit this threshold if you want another definition of "high voltage".
-    hvMask = false(nLines,1);
+    % Pre-build HV Mask
+    hvMask = false(nLines, 1);
     for i = 1:nLines
         if isfield(L0(i),'Voltage') && ~isempty(L0(i).Voltage) && isfinite(L0(i).Voltage)
             hvMask(i) = L0(i).Voltage >= 500;
         end
     end
 
-
-    %% -------------------- BUILD ELIGIBLE LINE POOL --------------------
-    % Candidate line indices.
+    %% -------------------- BUILD POOLS --------------------
     linePool = [];
-
-    % Add all lines if selected.
-    if useAllLines
-        linePool = [linePool; (1:nLines)'];
-    end
-
-    % Add high-voltage lines if selected.
-    if useHighVoltageLines
-        linePool = [linePool; find(hvMask)];
-    end
-
-    % Add parallel-line candidates if selected.
+    if useAllLines, linePool = (1:nLines)'; end
+    if useHighVoltageLines, linePool = unique([linePool; find(hvMask)]); end
     if useParallelLines
         for g = 1:numel(parallelGroups)
-            grp = parallelGroups{g};
-
-            % A group is only useful for mitigation if it has at least 2 lines.
-            if numel(grp) >= 2
-                linePool = [linePool; grp(:)];
+            if numel(parallelGroups{g}) >= 2
+                linePool = unique([linePool; parallelGroups{g}(:)]);
             end
         end
     end
 
-    % Remove duplicates.
-    linePool = unique(linePool);
-
-
-    %% -------------------- BUILD ELIGIBLE TRANSFORMER-WINDING POOL --------------------
-    % Each row will be [transformerIndex windingIndex].
     transPool = [];
-
     if useNeutralBlockers
-        for k = 1:nTrans
-
-            % If both windings are grounded-wye, allow both windings.
-            if bothWye(k)
-                transPool = [transPool; k 1; k 2];
-            end
-
-            % If autotransformer, allow winding 2 if not already present.
-            if isAuto(k)
-                if isempty(transPool) || ~any(transPool(:,1) == k & transPool(:,2) == 2)
-                    transPool = [transPool; k 2];
-                end
-            end
-        end
+        idxBoth = find(bothWye);
+        transPool = [idxBoth, ones(size(idxBoth)); idxBoth, 2*ones(size(idxBoth))];
+        idxAuto = find(isAuto);
+        transPool = unique([transPool; idxAuto, 2*ones(size(idxAuto))], 'rows');
     end
 
+    % Combined mitigation block (numeric indices for speed)
+    % Column 1: Type (1 for Line, 2 for Trans), Column 2: Index, Column 3: Winding
+    mitBlock = [ones(numel(linePool), 1), linePool, zeros(numel(linePool), 1);
+                2*ones(size(transPool,1), 1), transPool];
 
-    %% -------------------- BUILD COMBINED MITIGATION BLOCK --------------------
-    % Store all possible mitigations in one cell array.
-    % Each row is:
-    %   {'line', lineIndex}
-    %   {'trans', [transformerIndex windingIndex]}
-    mitBlock = {};
+    if isempty(mitBlock), error('No eligible mitigation candidates found.'); end
 
-    for i = 1:numel(linePool)
-        mitBlock(end+1,:) = {'line', linePool(i)};
-    end
-
-    for i = 1:size(transPool,1)
-        mitBlock(end+1,:) = {'trans', transPool(i,:)};
-    end
-
-    % Stop early if there is nothing to mitigate.
-    if isempty(mitBlock)
-        error('No eligible mitigation candidates were found.');
-    end
-
-
-    %% -------------------- PREALLOCATE RESULT STORAGE --------------------
-    % Logical state tables.
+    %% -------------------- PREALLOCATE --------------------
     lineState = true(nSim, nLines);
     transState = false(nSim, nTrans, 2);
+    chosenMitIndices = cell(nSim, 1); % Store indices, format strings later
+    metricValue = nan(nSim, 1);
+    label = false(nSim, 1);
+    maxTransName = strings(nSim, 1);
+    maxLineName = strings(nSim, 1);
 
-    % Human-readable logs.
-    chosenMitigations = cell(nSim,1);
-
-    % Metrics.
-    metricValue = nan(nSim,1);
-    label = false(nSim,1);
-
-    % Optional extra summaries.
-    maxTransName = strings(nSim,1);
-    maxLineName = strings(nSim,1);
-
-
-    %% -------------------- MAIN RANDOM SIMULATION LOOP --------------------
+    tic
+    %% -------------------- MAIN SIMULATION LOOP --------------------
     for simIdx = 1:nSim
-
-        % Reset network for this run.
+        tic
+        % Reset network
         app.L = L0;
         app.T = T0;
+        
+        lineOpen = false(nLines, 1);
+        windingBlocked = false(nTrans, 2);
 
-        % Reset local state trackers.
-        lineOpen = false(nLines,1);
-        windingBlocked = false(nTrans,2);
+        nThisMit = min(randi([minMit maxMit]), size(mitBlock, 1));
+        pickIdx = randperm(size(mitBlock, 1), nThisMit);
+        
+        appliedList = [];
 
-        % Random number of mitigations for this run.
-        nThisMit = randi([minMit maxMit], 1);
-
-        % Cannot choose more unique mitigations than exist.
-        nThisMit = min(nThisMit, size(mitBlock,1));
-
-        % Randomly sample unique mitigation entries.
-        pickIdx = randperm(size(mitBlock,1), nThisMit);
-
-        % Store human-readable descriptions.
-        thisDescriptions = strings(nThisMit,1);
-
-
-        %% -------------------- APPLY RANDOMLY CHOSEN MITIGATIONS --------------------
         for p = 1:nThisMit
+            mType = mitBlock(pickIdx(p), 1);
+            mIdx  = mitBlock(pickIdx(p), 2);
 
-            % Read one candidate.
-            thisType = mitBlock{pickIdx(p),1};
-            thisIdx  = mitBlock{pickIdx(p),2};
-
-            switch thisType
-
-                case 'line'
-                    if lineOpen(thisIdx)
-                        continue;
-                    end
-
-                    % If using parallel-line logic, never open all lines in a group.
-                    if useParallelLines
-                        canOpen = true;
-
-                        for g = 1:numel(parallelGroups)
-                            grp = parallelGroups{g};
-
-                            if any(grp == thisIdx)
-                                aliveInGroup = grp(~lineOpen(grp));
-
-                                % If only one line remains alive, do not open it.
-                                if numel(aliveInGroup) <= 1
-                                    canOpen = false;
-                                end
-                                break;
-                            end
-                        end
-
-                        if ~canOpen
-                            continue;
-                        end
-                    end
-
-                    % Apply line outage.
-                    lineOpen(thisIdx) = true;
-
-                    % Use your existing field names here if needed.
-                    % Change this block if your "open line" logic is different.
-                    if isfield(app.L(thisIdx),'Resistance')
-                        app.L(thisIdx).Resistance = NaN;
-                    end
-                    if isfield(app.L(thisIdx),'ResKm')
-                        app.L(thisIdx).ResKm = NaN;
-                    end
-
-                    % Save description.
-                    if isfield(L0(thisIdx),'Name')
-                        thisDescriptions(p) = "Line OFF: " + string(L0(thisIdx).Name);
-                    else
-                        thisDescriptions(p) = "Line OFF: " + string(thisIdx);
-                    end
-
-                case 'trans'
-                    trIdx = thisIdx(1);
-                    wIdx  = thisIdx(2);
-
-                    % Skip if already blocked in this run.
-                    if windingBlocked(trIdx,wIdx)
-                        continue;
-                    end
-
-                    % Apply blocker.
-                    windingBlocked(trIdx,wIdx) = true;
-
-                    % Store blocker flag in transformer struct.
-                    % Edit field name if your model uses something else.
-                    blockField = sprintf('blocker_w%d', wIdx);
-                    app.T(trIdx).(blockField) = true;
-
-                    % Save description.
-                    if isfield(T0(trIdx),'Name')
-                        thisDescriptions(p) = "Blocker ON: " + string(T0(trIdx).Name) + " W" + string(wIdx);
-                    else
-                        thisDescriptions(p) = "Blocker ON: Transformer " + string(trIdx) + " W" + string(wIdx);
-                    end
-            end
-        end
-
-
-        %% -------------------- RUN GIC SIMULATION --------------------
-        % This assumes your app already knows how to run one simulation.
-        [~, ~, ~, GIC_current] = runGIC_now(app);
-
-
-        %% -------------------- COMPUTE METRIC --------------------
-        switch lower(strtrim(resultType))
-
-            case 'max trans gic'
-                transAbs = abs(GIC_current.Trans);
-                metricValue(simIdx) = max(transAbs, [], 'all', 'omitnan');
-
-                if ~isempty(transAbs)
-                    [~, linIdxT] = max(transAbs, [], 'all', 'omitnan');
-                    [trMaxIdx, wMaxIdx] = ind2sub(size(transAbs), linIdxT);
-
-                    if isfield(app.T(trMaxIdx),'Name')
-                        maxTransName(simIdx) = string(app.T(trMaxIdx).Name) + " (W" + string(wMaxIdx) + ")";
-                    else
-                        maxTransName(simIdx) = "Transformer " + string(trMaxIdx) + " (W" + string(wMaxIdx) + ")";
-                    end
+            if mType == 1 % LINE
+                if lineOpen(mIdx), continue; end
+                
+                % Parallel Check
+                gID = lineGroupMap(mIdx);
+                if gID > 0
+                    grp = parallelGroups{gID};
+                    if sum(~lineOpen(grp)) <= 1, continue; end
                 end
 
-            case 'change in total gic'
-                subsAbs = abs(GIC_current.Subs);
-                totalNow = max(sum(subsAbs, 1, 'omitnan'), [], 'omitnan');
+                lineOpen(mIdx) = true;
+                if hasRes, app.L(mIdx).Resistance = NaN; end
+                if hasResKm, app.L(mIdx).ResKm = NaN; end
+                appliedList = [appliedList; pickIdx(p)]; 
 
-                % This assumes app.GICbase exists.
-                baseSubsAbs = abs(GIC_current.Original_Subs);
-                totalBase = max(sum(baseSubsAbs, 1, 'omitnan'), [], 'omitnan');
-
-                metricValue(simIdx) = totalBase - totalNow;
-
-            otherwise
-                error('Unknown resultType: %s', resultType);
-        end
-
-
-        %% -------------------- COMPUTE LABEL --------------------
-        % For both metrics here, "yes" means good.
-        label(simIdx) = metricValue(simIdx) <= target;
-
-        % If using "Change in Total GIC", the logic may need reversing depending on your definition.
-        % For example, if bigger reduction is better, then use:
-        % label(simIdx) = metricValue(simIdx) >= target;
-
-
-        %% -------------------- STORE ON/OFF STATES --------------------
-        lineState(simIdx,:) = ~lineOpen;
-        transState(simIdx,:,:) = windingBlocked;
-
-        % Remove empty descriptions caused by skipped duplicates or invalid picks.
-        thisDescriptions = thisDescriptions(thisDescriptions ~= "");
-        chosenMitigations{simIdx} = cellstr(thisDescriptions);
-
-        % Optional max line info.
-        if isfield(GIC_current,'Lines') && ~isempty(GIC_current.Lines)
-            linesAbs = abs(GIC_current.Lines);
-            [~, linIdxL] = max(linesAbs, [], 'all', 'omitnan');
-            [lineIdxMax, ~] = ind2sub(size(linesAbs), linIdxL);
-
-            if isfield(app.L(lineIdxMax),'Name')
-                maxLineName(simIdx) = string(app.L(lineIdxMax).Name);
-            else
-                maxLineName(simIdx) = "Line " + string(lineIdxMax);
+            else % TRANSFORMER
+                wIdx = mitBlock(pickIdx(p), 3);
+                if windingBlocked(mIdx, wIdx), continue; end
+                
+                windingBlocked(mIdx, wIdx) = true;
+                app.T(mIdx).(sprintf('blocker_w%d', wIdx)) = true;
+                appliedList = [appliedList; pickIdx(p)]; 
             end
         end
+
+        
+        [~, ~, ~, GIC_current] = runGIC_now(app);
+
+        %% -------------------- METRICS --------------------
+        switch lower(strtrim(resultType))
+            case 'max trans gic'
+                transAbs = abs(GIC_current.Trans);
+                [val, linIdx] = max(transAbs, [], 'all', 'omitnan');
+                metricValue(simIdx) = val;
+                if ~isnan(val)
+                    [trM, wM] = ind2sub(size(transAbs), linIdx);
+                    maxTransName(simIdx) = sprintf('%s (W%d)', string(app.T(trM).Name), wM);
+                end
+            case 'change in total gic'
+                totalNow = max(sum(abs(GIC_current.Subs), 1, 'omitnan'), [], 'omitnan');
+                totalBase = max(sum(abs(GIC_current.Original_Subs), 1, 'omitnan'), [], 'omitnan');
+                metricValue(simIdx) = totalBase - totalNow;
+        end
+
+        label(simIdx) = metricValue(simIdx) <= target;
+        lineState(simIdx, :) = ~lineOpen;
+        transState(simIdx, :, :) = windingBlocked;
+        chosenMitIndices{simIdx} = appliedList;
+        
+        elapsed = toc;
+        fprintf('Sim %d/%d, time: %.3f s\n', simIdx, nSim, elapsed);
+        
     end
 
-
-    %% -------------------- PACKAGE OUTPUT --------------------
+    %% -------------------- POST-PROCESSING --------------------
+    % Move string building out of the performance-critical loop
     results = struct();
+    results.chosenMitigations = cell(nSim, 1);
+    for s = 1:nSim
+        indices = chosenMitIndices{s};
+        logs = strings(numel(indices), 1);
+        for i = 1:numel(indices)
+            row = mitBlock(indices(i), :);
+            if row(1) == 1
+                logs(i) = "Line OFF: " + string(L0(row(2)).Name);
+            else
+                logs(i) = sprintf("Blocker ON: %s W%d", string(T0(row(2)).Name), row(3));
+            end
+        end
+        results.chosenMitigations{s} = cellstr(logs);
+    end
 
-    % Core outputs.
+%% -------- BUILD ML-READY TABLE --------
+    % Only include candidate lines and transformers to keep the table compact.
+    
+    % X_lines: 1 = Line was OPEN (mitigation active), 0 = Line was CLOSED (normal)
+    X_lines = double(~lineState(:, linePool));
+    
+    % X_trans: 1 = Blocker was ON, 0 = Blocker was OFF
+    nTransCand = size(transPool, 1);
+    X_trans = zeros(nSim, nTransCand);
+    for j = 1:nTransCand
+        trIdx = transPool(j,1);
+        wIdx  = transPool(j,2);
+        X_trans(:,j) = double(transState(:, trIdx, wIdx));
+    end
+    
+    % Combine into feature matrix [Lines | Transformers]
+    X = [X_lines, X_trans];
+    
+    %% -------- DYNAMIC VARIABLE NAMING --------
+    % Generate valid, unique headers for CSV/Table columns
+    
+    lineNames = strings(1, numel(linePool));
+    for i = 1:numel(linePool)
+        idx = linePool(i);
+        name = "Line_" + idx;
+        if isfield(L0(idx), 'Name') && ~isempty(L0(idx).Name)
+            name = string(L0(idx).Name);
+        end
+        lineNames(i) = matlab.lang.makeValidName(name);
+    end
+    
+    transNames = strings(1, nTransCand);
+    for j = 1:nTransCand
+        trIdx = transPool(j,1);
+        wIdx  = transPool(j,2);
+        name = "Trans_" + trIdx;
+        if isfield(T0(trIdx), 'Name') && ~isempty(T0(trIdx).Name)
+            name = string(T0(trIdx).Name);
+        end
+        transNames(j) = matlab.lang.makeValidName(name + "_W" + wIdx);
+    end
+    
+    % Final Header Setup
+    varNames = [lineNames, transNames, "Metric", "Label"];
+    varNames = matlab.lang.makeUniqueStrings(varNames);
+
+    
+    %% -------- PACKAGING & STORAGE --------
+    % Add metrics and labels to the structure for the .mat file
     results.lineState = lineState;
     results.transState = transState;
     results.metricValue = metricValue;
     results.label = label;
-    results.chosenMitigations = chosenMitigations;
-
-    % Names.
     results.maxTransName = maxTransName;
     results.maxLineName = maxLineName;
 
-    % Save the candidate pools too for debugging.
-    results.linePool = linePool;
-    results.transPool = transPool;
-    results.mitBlock = mitBlock;
-
-
-    %% -------------------- BUILD ML-READY TABLE --------------------
+    % Build the final Table
+    results.MLTable = array2table([X, metricValue, double(label)], ...
+        'VariableNames', cellstr(varNames));
     
-    % Number of simulations
-    nSim = numel(results.label);
-    
-    %% -------- BUILD FEATURE MATRICES --------
-    
-    % Lines: convert to "1 = mitigated (OFF), 0 = normal (ON)"
-    X_lines = double(~results.lineState);
-    
-    % Transformers: already "1 = blocked"
-    X_trans = reshape(double(results.transState), nSim, []);
-    
-    % Combine features
-    X = [X_lines, X_trans];
-    
-    %% -------- BUILD VARIABLE NAMES (REAL NAMES, CLEANED) --------
-    
-    % ----- LINE NAMES -----
-    nLines = size(X_lines,2);
-    lineNames = strings(1, nLines);
-    
-    for i = 1:nLines
-        if isfield(app.L(i),'Name') && ~isempty(app.L(i).Name)
-            name = string(app.L(i).Name);
-        else
-            name = "Line_" + string(i);
-        end
-    
-        % Clean name for MATLAB table
-        lineNames(i) = matlab.lang.makeValidName(name);
-    end
-    
-    
-    % ----- TRANSFORMER WINDING NAMES -----
-    nTrans = size(results.transState,2);
-    transNames = strings(1, 2*nTrans);
-    
-    col = 1;
-    for t = 1:nTrans
-    
-        if isfield(app.T(t),'Name') && ~isempty(app.T(t).Name)
-            baseName = string(app.T(t).Name);
-        else
-            baseName = "Trans_" + string(t);
-        end
-    
-        % Clean name
-        baseName = matlab.lang.makeValidName(baseName);
-    
-        % Add windings
-        transNames(col) = baseName + "_W1";
-        col = col + 1;
-    
-        transNames(col) = baseName + "_W2";
-        col = col + 1;
-    end
-    
-    
-    %% -------- FINAL VARIABLE NAMES --------
-    varNames = [lineNames, transNames, "Metric", "Label"];
-    
-    % Ensure uniqueness (important if names repeat)
-    varNames = matlab.lang.makeUniqueStrings(varNames);
-    
-    
-    %% -------- BUILD TABLE --------
-    results.MLTable = array2table( ...
-        [X, results.metricValue, double(results.label)], ...
-        'VariableNames', cellstr(varNames) ...
-    );
-    
-    
-    %% -------- OPTIONAL: SAVE --------
-    % CSV (for ML tools)
-    writetable(results.MLTable, 'random_mitigation_ML_table.csv');
-    
-    % MAT (for MATLAB reuse)
-    save('random_mitigation_ML_table.mat', 'results');
-
-    
-    % -------------------- SAVE RESULTS --------------------
-    timestamp = datestr(now,'yyyy-mm-dd_HH-MM-SS');
-    
-    matName = "gic_results_random" + timestamp + ".mat";
-    csvName = "random_mitigation_ML_table_" + timestamp + ".csv";
+    % Export with Timestamp
+    ts = datestr(now, 'yyyymmdd_HHMMSS');
+    matName = "gic_results_" + ts + ".mat";
+    csvName = "gic_ML_table_" + ts + ".csv";
     
     save(matName, 'results', '-v7.3');
     writetable(results.MLTable, csvName);
     
     results.saveFile = char(matName);
     results.MLTableFile = char(csvName);
+
+
+
+
+
+
+
+
+
+
+
+%%Generate random names for assignment
+    
+% Additionally export a CSV with randomized variable names to anonymize headers
+rng('shuffle'); % non-deterministic for anonymization
+
+% Helper to generate random numeric string of length n
+randDigits = @(n) char('0' + randi([0 9], 1, n));
+
+% Helper to generate random alphanumeric string of length n
+chars = ['0':'9' 'A':'Z' 'a':'z'];
+randAlphaNum = @(n) chars(randi(numel(chars), 1, n));
+
+% Build anonymized names in same order as varNames (Lines, Trans, Metric, Label)
+nLinesVars = numel(lineNames);
+nTransVars = numel(transNames);
+
+anonLineNames = strings(1, nLinesVars);
+for k = 1:nLinesVars
+    anonLineNames(k) = "L" + string(randDigits(3));
+end
+
+anonTransNames = strings(1, nTransVars);
+for k = 1:nTransVars
+    anonTransNames(k) = "xT" + string(randAlphaNum(3));
+end
+
+% Ensure Metric and Label get anonymized fixed names (but distinct)
+anonMetricName = "Metric_" + string(randDigits(3));
+anonLabelName  = "Label_"  + string(randDigits(3));
+
+anonVarNames = [anonLineNames, anonTransNames, anonMetricName, anonLabelName];
+anonVarNames = matlab.lang.makeUniqueStrings(anonVarNames);
+
+% Create anonymized table and write CSV
+anonTable = results.MLTable;
+anonTable.Properties.VariableNames = cellstr(anonVarNames);
+
+anonCsvName = "gic_ML_table_anon_" + ts + ".csv";
+writetable(anonTable, anonCsvName);
+
+% Record filenames in results
+results.MLTableAnonFile = char(anonCsvName);
+results.AnonVariableMap = struct('Original', {varNames}, 'Anon', {cellstr(anonVarNames)});
+    
 end
