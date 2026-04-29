@@ -45,4 +45,5 @@ ey_t = ey(idx,:);
 % --- Plot (north = ey, east = ex) ---
 quiverm(app.latq, app.lonq, ey_t(:), ex_t(:), 'r', 'AutoScale','on','LineWidth',1.5);
 
+
 end

@@ -9,14 +9,14 @@ end
 ex = app.ex;
 ey = app.ey;
 
-% --- Ensure rows = time ---
-if exist('b','var') && ~isempty(b) && isfield(b(1),'times')
-    T = numel(b(1).times);
-    if size(ex,1) ~= T && size(ex,2) == T
-        ex = ex.';
-        ey = ey.';
-    end
-end
+% % --- Ensure rows = time ---
+% if exist('b','var') && ~isempty(b) && isfield(b(1),'times')
+%     T = numel(b(1).times);
+%     if size(ex,1) ~= T && size(ex,2) == T
+%         ex = ex.';
+%         ey = ey.';
+%     end
+% end
 
 % --- Find peak E over time ---
 [~, idx] = max(sum(hypot(ex, ey), 2));
@@ -43,7 +43,7 @@ ex_t = ex(idx,:);
 ey_t = ey(idx,:);
 
 % --- Plot (north = ey, east = ex) ---
-quiverm(app.latq, app.lonq, ex_t(:), ey_t(:), 'r', 'AutoScale','on','LineWidth',1.5);
+quiverm(app.latq, app.lonq, ey_t(:), ex_t(:), 'r', 'AutoScale','on','LineWidth',1.5);
 
 
 end
