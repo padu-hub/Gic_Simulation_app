@@ -19,7 +19,7 @@ needOriginal = isempty(app.gic_originalS) || ...
 appendStatus(app, '************************LINE VOLTAGES****************************');
 tic;
 
-editedChanged = isNetworkChanged(L, T, OriginalL, OriginalT);
+editedChanged = isNetworkChanged(app, L, T, OriginalL, OriginalT);
 
 if uniform
     nTimes = 1;
@@ -171,9 +171,11 @@ app.StatusTextArea.Value = [app.StatusTextArea.Value; msg];
 drawnow;
 end
 
-function changed = isNetworkChanged(L, T, L0, T0)
+function changed = isNetworkChanged(app, L, T, L0, T0)
 changed = ~isequal(extractNetwork(L),  extractNetwork(L0)) || ...
-    ~isequal(extractNetwork(T),  extractNetwork(T0));
+    ~isequal(extractNetwork(T),  extractNetwork(T0))||...
+    ~isequal(app.b_original, app.b_cleaned);
+
 end
 
 function out = extractNetwork(s)
@@ -182,3 +184,4 @@ dropFields = {'GIC','maxGIC','GIC_Original','maxGIC_Original'};
 existing   = dropFields(isfield(s, dropFields));
 out        = rmfield(s, existing);
 end
+

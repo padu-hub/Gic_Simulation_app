@@ -116,14 +116,32 @@ switch mode
         % % === Plot 2: Close-up map (with E-field) ===
         if ~isempty(answer)
             figure;
-            worldmap(latLimClose, lonLimClose);
+            ax= worldmap(latLimClose, lonLimClose);
             hold on;
-    
+
             [A, RA] = readBasemapImage("streets", latLimClose, lonLimClose);
             [xGrid, yGrid] = worldGrid(RA);
             [latGrid, lonGrid] = projinv(RA.ProjectedCRS, xGrid, yGrid);
           
             geoshow(latGrid, lonGrid, A)
+
+            if ~isprop(app,'Ex_s') || ~isprop(app,'Ey_s') || isempty(app.Ex_s) || isempty(app.Ey_s)
+                return
+            end
+            
+            ex = app.Ex_s;
+            ey = app.Ey_s;
+
+            if size(ex,1) ~= size(ey,1)
+                error('Ex_s and Ey_s must have same number of time samples.');
+            end
+            
+            [~, idx] = max(sum(hypot(ex,ey),2));   % peak time index
+            ex_t = ex(idx,:).';
+            ey_t = ey(idx,:).';
+
+            axes(ax);                            % make ax current
+            quiverm(app.lat_s(:), app.lon_s(:), -10*ey_t(:),-10*ex_t(:));
     
     
             drawBaseMapAndData(L, subLat, subLon, gicVals, cVals , "real");
@@ -135,9 +153,9 @@ switch mode
             end
     
             % === Overlay E-field only on close-up map ===
-            emaxT = plotEfield(app, b, subLat, subLon);
+            %emaxT = plotEfield(app, b, subLat, subLon);
     
-            %title([titleStr, '- Close-Up at ', emaxT], 'FontSize', 16);
+            title([titleStr, '- Close-Up at ', emaxT], 'FontSize', 16);
             hold off;
         end
     otherwise

@@ -3,26 +3,24 @@ function plotGICMitigationResults(results)
 % ============================================================
 % ---------- Combined Plot: Total Substation GIC + Max Transformer GIC + Max Line GIC ----------
 % ==================== COMBINED GIC PLOT ====================
-% Plot all three metrics on one figure:% 1) Total substation GIC sum as a line on the left y-axis
+% Plot all three metrics on one figure:
+% 1) Total substation GIC sum as a line on the left y-axis
 % 2) Max transformer GIC as a wide background bar on the right y-axis
 % 3) Max line GIC as a narrower overlapping bar on the right y-axis
 
-
 figure;
-nSteps  = numel(results.sumGICSubs);
-x       = 0:(nSteps-1);   % 0 = baseline
     %% Bottom axes for BAR GRAPHS
     axBar = axes;
     
     % Plot on bottom axes
     yyaxis(axBar, 'right')
-    b1 = bar(axBar, x, results.maxTransGIC, 0.75, ...
+    b1 = bar(axBar, x, result.maxTransGIC, 0.75, ...
         'FaceColor', [1.00 0.65 0.65], ...
         'EdgeColor', [0.80 0.25 0.25], ...
         'LineWidth', 1.0);
     hold(axBar, 'on')
     
-    b2 = bar(axBar, x, results.maxLinesGIC, 0.45, ...
+    b2 = bar(axBar, x, result.maxLinesGIC, 0.45, ...
         'FaceColor', [0.35 0.55 1.00], ...
         'EdgeColor', [0.10 0.25 0.80], ...
         'LineWidth', 1.0);
@@ -46,7 +44,7 @@ x       = 0:(nSteps-1);   % 0 = baseline
     axLine = axes('Position', axBar.Position);
     
     % Plot line on top axes
-    p1 = plot(axLine, x, results.sumGICSubs, '-k', ...
+    p1 = plot(axLine, x, result.sumGICSubs, '-k', ...
         'LineWidth', 2.5, ...
         'MarkerSize', 4, ...
         'MarkerFaceColor', 'k');
@@ -84,3 +82,5 @@ x       = 0:(nSteps-1);   % 0 = baseline
          'FontSize', 16);
     
 end
+
+

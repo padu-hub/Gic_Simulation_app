@@ -3,15 +3,10 @@ function results = runGreedyGICMitigation(app, GICbase, modeStr)
 % Runs a greedy GIC mitigation routine using the selected mode.
 %
 % Mode summary:
-%   'original'        -> parallel lines + auto W2 blockers
+%   'original'        -> parallel lines + winding blockers
 %   'windings_only'   -> only winding blockers
-%   'all_lines'       -> only line opening on any line
+%   'all_lines'       -> line opening on any line
 %   'parallel_lines'  -> only parallel-line opening
-%
-% Notes:
-%   - Baseline is stored at row/index 1
-%   - Each new mitigation is appended after re-running the simulation
-%   - Helper functions are assumed to already exist and be correct
 
 %% Normalize baseline GIC fields
 GICbase.Subs  = GICbase.Original_Subs;
@@ -25,7 +20,7 @@ switch modeStr
     case 'original'
         activeLineMitigation    = true;
         activeWindingMitigation = true;
-        lineMode    = 'parallel';
+        lineMode    = 'allLines';
         windingMode = 'all';
 
     case 'windings_only'
@@ -50,135 +45,126 @@ switch modeStr
         error('Invalid modeStr: %s', modeStr);
 end
 
-%% Basic network information and static eligibility masks
+%% Basic network sizes
 nLines = numel(app.L);
 nTrans = numel(app.T);
 
+%% Build parallel groups and a line-to-group lookup (computed once)
 if strcmp(lineMode, 'parallel')
     parallelGroups = buildParallelGroups(app.L);
+
+    % Map each line index to its group for O(1) lookup during updates
+    lineToGroup = zeros(nLines, 1);
+    for g = 1:numel(parallelGroups)
+        for idx = parallelGroups{g}(:)'
+            lineToGroup(idx) = g;
+        end
+    end
+
+    % Track how many lines in each group are still open
+    groupAliveCount = zeros(numel(parallelGroups), 1);
+    for g = 1:numel(parallelGroups)
+        groupAliveCount(g) = numel(parallelGroups{g});
+    end
+
+    % Mark which lines currently belong to an eligible parallel group (>= 2 alive)
+    lineInEligibleGroup = false(nLines, 1);
+    for g = 1:numel(parallelGroups)
+        if groupAliveCount(g) >= 2
+            lineInEligibleGroup(parallelGroups{g}) = true;
+        end
+    end
 else
-    parallelGroups = {};
+    parallelGroups      = {};
+    lineToGroup         = [];
+    groupAliveCount     = [];
+    lineInEligibleGroup = false(nLines, 1);
 end
 
-
-isAuto = arrayfun(@(t) ...
-    (isfield(t,'HV_Type') && strcmpi(t.HV_Type,'auto')) || ...
-    (isfield(t,'LV_Type') && strcmpi(t.LV_Type,'auto')), ...
-    app.T);
+%% Precompute transformer properties (done once, not per iteration)
+isAuto = false(nTrans, 1);
+for k = 1:nTrans
+    t = app.T(k);
+    isAuto(k) = (isfield(t, 'HV_Type') && strcmpi(t.HV_Type, 'auto')) || ...
+                (isfield(t, 'LV_Type') && strcmpi(t.LV_Type, 'auto'));
+end
 
 windingIsWye = getWyeGroundedWindings(app.T);
-bothWye = windingIsWye(:,1) & windingIsWye(:,2);
+bothWye      = windingIsWye(:,1) & windingIsWye(:,2);
+
+%% Build initial winding candidate mask (nTrans x 2 logical)
+windingCandMask = false(nTrans, 2);
+if activeWindingMitigation
+    switch windingMode
+        case 'autoW2'
+            windingCandMask(isAuto, 2) = true;
+        case 'all'
+            windingCandMask(bothWye, 1) = true;
+            windingCandMask(bothWye, 2) = true;
+            windingCandMask(isAuto, 2)  = true;
+    end
+end
 
 %% State trackers
-lineOpen       = false(nLines,1);
-windingBlocked = false(nTrans,2);
+lineOpen       = false(nLines, 1);
+windingBlocked = false(nTrans, 2);
 
-%% Clear and initialize result storage
-sumGICSubs   = [];
-maxTransGIC  = [];
-maxLinesGIC  = [];
-maxTransName = strings(0,1);
-maxLineName  = strings(0,1);
-mitigations  = {};
+%% Result storage using doubling-buffer allocation
+allocSize    = 587; %num of lines and trans
+sumGICSubs   = zeros(allocSize, 1);
+maxTransGIC  = zeros(allocSize, 1);
+maxLinesGIC  = zeros(allocSize, 1);
+maxTransName = strings(allocSize, 1);
+maxLineName  = strings(allocSize, 1);
+mitigations  = cell(allocSize, 1);
+
+%% Table row accumulator (cell array avoids repeated table vertcat in loop)
+varNames = app.MitigationResults.Properties.VariableNames;
+rowAccum = cell(0, numel(varNames));
 
 %% Reset app table for a fresh run
-app.MitigationResults = app.MitigationResults([],:);
+app.MitigationResults     = app.MitigationResults([], :);
 app.SpreadsheetTable.Data = app.MitigationResults;
 
 %% Baseline metrics
-subsAbs0 = abs(GICbase.Subs);
-totPerT0 = sum(subsAbs0, 1, 'omitnan');
-sum0     = max(totPerT0, [], 'omitnan');
-
-if isfield(GICbase, 'Trans') && ~isempty(GICbase.Trans)
-    transAbs0 = abs(GICbase.Trans);
-    [maxT0, linIdxT0] = max(transAbs0, [], 'all', 'omitnan');
-
-    if isempty(maxT0) || isnan(maxT0)
-        maxT0 = 0;
-        maxTransName0 = "None";
-    else
-        [transIdx0, windIdx0] = ind2sub(size(transAbs0), linIdxT0);
-        if isfield(app.T(transIdx0), 'Name')
-            maxTransName0 = string(app.T(transIdx0).Name) + " (W" + string(windIdx0) + ")";
-        else
-            maxTransName0 = "Transformer " + string(transIdx0) + " (W " + string(windIdx0) + ")";
-        end
-    end
-else
-    maxT0 = 0;
-    maxTransName0 = "None";
-end
-
-if isfield(GICbase, 'Lines') && ~isempty(GICbase.Lines)
-    linesAbs0 = abs(GICbase.Lines);
-    [maxL0, linIdxL0] = max(linesAbs0, [], 'all', 'omitnan');
-
-    if isempty(maxL0) || isnan(maxL0)
-        maxL0 = 0;
-        maxLineName0 = "None";
-    else
-        [lineIdx0, ~] = ind2sub(size(linesAbs0), linIdxL0);
-        if isfield(app.L(lineIdx0), 'Name')
-            maxLineName0 = string(app.L(lineIdx0).Name);
-        else
-            maxLineName0 = "Line " + string(lineIdx0);
-        end
-    end
-else
-    maxL0 = 0;
-    maxLineName0 = "None";
-end
+[sum0, maxT0, maxTName0, maxL0, maxLName0] = extractMetrics(GICbase);
 
 sumGICSubs(1)   = sum0;
 maxTransGIC(1)  = maxT0;
 maxLinesGIC(1)  = maxL0;
-maxTransName(1) = maxTransName0;
-maxLineName(1)  = maxLineName0;
+maxTransName(1) = maxTName0;
+maxLineName(1)  = maxLName0;
 mitigations{1}  = '0: Baseline (no mitigation applied)';
+rowAccum(end+1, :) = {"Baseline", maxT0, maxTName0, sum0, maxL0, maxLName0};
 
 baselineMsg = sprintf('Baseline -> TotalGIC = %.2f | MaxTrans = %.2f [%s] | MaxLine = %.2f [%s]', ...
-    sum0, maxT0, char(maxTransName0), maxL0, char(maxLineName0));
+    sum0, maxT0, char(maxTName0), maxL0, char(maxLName0));
 app.StatusTextArea.Value = [app.StatusTextArea.Value; baselineMsg];
+app.StatusTextArea.scroll('bottom');
+drawnow limitrate;
 
-baselineRow = table( ...
-    "Baseline", ...
-    maxT0, ...
-    maxTransName0, ...
-    sum0, ...
-    maxL0, ...
-    maxLineName0, ...
-    'VariableNames', app.MitigationResults.Properties.VariableNames);
+%% Flush table to UI (used at intervals and at the end)
+    function flushTable()
+        app.MitigationResults     = cell2table(rowAccum, 'VariableNames', varNames);
+        app.SpreadsheetTable.Data = app.MitigationResults;
+        drawnow limitrate;
+    end
 
-app.MitigationResults = [app.MitigationResults; baselineRow];
-app.SpreadsheetTable.Data = app.MitigationResults;
-drawnow;
+flushTable();
 
-%% Initialize loop state
+%% Main greedy mitigation loop
 GIC_current = GICbase;
 step = 1;
 
-%% Main greedy mitigation loop
 while true
 
-    % Build current line candidates
+    %-- Build line candidate list from current mask --%
     if activeLineMitigation
         switch lineMode
             case 'parallel'
-                candLines = [];
-                for g = 1:numel(parallelGroups)
-                    grp = parallelGroups{g};
-                    alive = grp(~lineOpen(grp));
-                    if numel(alive) >= 2
-                        candLines = [candLines; alive(:)];
-                    end
-                end
-            %     candLines = unique(candLines);
-            % case 'allLines_rankedBased'
-            %     grp
+                candLines = find(lineInEligibleGroup & ~lineOpen);
             case 'allLines'
                 candLines = find(~lineOpen);
-
             otherwise
                 candLines = [];
         end
@@ -186,157 +172,105 @@ while true
         candLines = [];
     end
 
-    % Build current winding candidates
+    %-- Build winding candidate list from current mask --%
     if activeWindingMitigation
-        switch windingMode
-            case 'autoW2'
-                candWind = [];
-                for k = 1:nTrans
-                    if isAuto(k) && ~windingBlocked(k,2)
-                        candWind(end+1,:) = [k 2];
-                    end
-                end
-
-            case 'all'
-                candWind = [];
-                for k = 1:nTrans
-
-                    if bothWye(k)
-                        for w = 1:2
-                            if ~windingBlocked(k,w)
-                                candWind(end+1,:) = [k w];
-                            end
-                        end
-                    end
-
-                    if isAuto(k) && ~windingBlocked(k,2)
-                        if isempty(candWind) || ~any(candWind(:,1)==k & candWind(:,2)==2)
-                            candWind(end+1,:) = [k 2];
-                        end
-                    end
-                end
-
-            otherwise
-                candWind = [];
-        end
+        [tr, wd]  = find(windingCandMask & ~windingBlocked);
+        candWind  = [tr, wd];
     else
         candWind = [];
     end
 
-    % Stop if nothing remains or GIC is already zero
-    currentTotalGIC = sumGICSubs(step);
+    %-- Check stopping conditions --%
+    currentTotalGIC  = sumGICSubs(step);
     noMoreMitigation = isempty(candLines) && isempty(candWind);
-    gicIsZero = (currentTotalGIC <= 50);
+    gicIsZero        = currentTotalGIC <= 50;
 
     if noMoreMitigation || gicIsZero
         if noMoreMitigation
-            msg = 'Stopping: No further mitigations available';
+            stopMsg = 'Stopping: No further mitigations available';
         else
-            msg = 'Stopping: GIC has reached zero';
+            stopMsg = 'Stopping: GIC has reached zero';
         end
-        app.StatusTextArea.Value = [app.StatusTextArea.Value; msg];
-        drawnow;
+        app.StatusTextArea.Value = [app.StatusTextArea.Value; stopMsg];
+        app.StatusTextArea.scroll('bottom');
+        drawnow limitrate;
         break;
     end
 
-    % Pick worst eligible element
+    %-- Select the worst eligible element --%
     [type, idx, val] = selectWorstGICElement(GIC_current, candLines, candWind);
 
     if isempty(type) || isnan(val)
-        msg = 'Stopping: No valid candidate found';
-        app.StatusTextArea.Value = [app.StatusTextArea.Value; msg];
-        drawnow;
+        app.StatusTextArea.Value = [app.StatusTextArea.Value; 'Stopping: No valid candidate found'];
+        app.StatusTextArea.scroll('bottom');
+        drawnow limitrate;
         break;
     end
 
-    % Apply one mitigation
+    %-- Apply the mitigation to the network --%
     [app, lineOpen, windingBlocked, description] = ...
         applyMitigationToNetwork(app, type, idx, lineOpen, windingBlocked);
 
-    rowIdx = step + 1;
-    mitigations{rowIdx} = description;
-    app.StatusTextArea.Value = [app.StatusTextArea.Value; description];
-    drawnow;
+    %-- Incrementally update candidate masks --%
+    % Only the affected entry changes, so no need to rebuild from scratch
+    if strcmp(type, 'line')
+        lineOpen(idx) = true;
+        if strcmp(lineMode, 'parallel') && lineToGroup(idx) > 0
+            g = lineToGroup(idx);
+            groupAliveCount(g) = groupAliveCount(g) - 1;
+            if groupAliveCount(g) < 2
+                % Group no longer has enough parallel lines — remove eligibility
+                lineInEligibleGroup(parallelGroups{g}) = false;
+            end
+        end
 
-    % Re-run simulation after network update
+    elseif strcmp(type, 'winding')
+        windingBlocked(idx(1), idx(2))  = true;
+        windingCandMask(idx(1), idx(2)) = false;
+    end
+
+    %-- Re-run simulation with updated network --%
     [~, ~, ~, GIC_current] = runGIC_now(app);
 
-    % Updated total substation GIC
-    subsAbsN = abs(GIC_current.Subs);
-    totPerTN = sum(subsAbsN, 1, 'omitnan');
-    sumN     = max(totPerTN, [], 'omitnan');
+    %-- Extract metrics from new result --%
+    [sumN, maxTN, maxTNameN, maxLN, maxLNameN] = extractMetrics(GIC_current);
 
-    % Updated max transformer value and name
-    if isfield(GIC_current, 'Trans') && ~isempty(GIC_current.Trans)
-        transAbsN = abs(GIC_current.Trans);
-        [maxTN, linIdxTN] = max(transAbsN, [], 'all', 'omitnan');
-
-        if isempty(maxTN) || isnan(maxTN)
-            maxTN = 0;
-            maxTransNameN = "None";
-        else
-            [transIdxN, windIdxN] = ind2sub(size(transAbsN), linIdxTN);
-            if isfield(app.T(transIdxN), 'Name')
-                maxTransNameN = string(app.T(transIdxN).Name) + " (W" + string(windIdxN) + ")";
-            else
-                maxTransNameN = "Transformer " + string(transIdxN) + " (W" + string(windIdxN) + ")";
-            end
-        end
-    else
-        maxTN = 0;
-        maxTransNameN = "None";
-    end
-
-    % Updated max line value and name
-    if isfield(GIC_current, 'Lines') && ~isempty(GIC_current.Lines)
-        linesAbsN = abs(GIC_current.Lines);
-        [maxLN, linIdxLN] = max(linesAbsN, [], 'all', 'omitnan');
-
-        if isempty(maxLN) || isnan(maxLN)
-            maxLN = 0;
-            maxLineNameN = "None";
-        else
-            [lineIdxN, ~] = ind2sub(size(linesAbsN), linIdxLN);
-            if isfield(app.L(lineIdxN), 'Name')
-                maxLineNameN = string(app.L(lineIdxN).Name);
-            else
-                maxLineNameN = "Line " + string(lineIdxN);
-            end
-        end
-    else
-        maxLN = 0;
-        maxLineNameN = "None";
-    end
-
-    % Store updated step results
+    %-- Grow result buffers if needed (doubling strategy) --%
+    rowIdx = step + 1;
+    %-- Store results for this step --%
     sumGICSubs(rowIdx)   = sumN;
     maxTransGIC(rowIdx)  = maxTN;
     maxLinesGIC(rowIdx)  = maxLN;
-    maxTransName(rowIdx) = maxTransNameN;
-    maxLineName(rowIdx)  = maxLineNameN;
+    maxTransName(rowIdx) = maxTNameN;
+    maxLineName(rowIdx)  = maxLNameN;
+    mitigations{rowIdx}  = description;
+    rowAccum(end+1, :)   = {string(description), maxTN, maxTNameN, sumN, maxLN, maxLNameN};
 
-    % Log to app
+    %-- Log step result to status text area --%
     stepMsg = sprintf('Step %d -> TotalGIC = %.2f | MaxTrans = %.2f [%s] | MaxLine = %.2f [%s]', ...
-        step, sumN, maxTN, char(maxTransNameN), maxLN, char(maxLineNameN));
-    app.StatusTextArea.Value = [app.StatusTextArea.Value; stepMsg];
+        step, sumN, maxTN, char(maxTNameN), maxLN, char(maxLNameN));
+    app.StatusTextArea.Value = [app.StatusTextArea.Value; description; stepMsg];
+    app.StatusTextArea.scroll('bottom');
+    drawnow limitrate;
 
-    % Append row to app table
-    newRow = table( ...
-        string(description), ...
-        maxTN, ...
-        maxTransNameN, ...
-        sumN, ...
-        maxLN, ...
-        maxLineNameN, ...
-        'VariableNames', app.MitigationResults.Properties.VariableNames);
+    %-- Flush table to UI every 5 steps --%
+    if mod(step, 5) == 0
+        flushTable();
+    end
 
-    app.MitigationResults = [app.MitigationResults; newRow];
-    app.SpreadsheetTable.Data = app.MitigationResults;
-    drawnow;
-
-    % Advance step
     step = step + 1;
 end
+
+%% Final table flush to catch any remaining rows
+flushTable();
+
+%% Trim result arrays to actual number of steps
+sumGICSubs   = sumGICSubs(1:step);
+maxTransGIC  = maxTransGIC(1:step);
+maxLinesGIC  = maxLinesGIC(1:step);
+maxTransName = maxTransName(1:step);
+maxLineName  = maxLineName(1:step);
+mitigations  = mitigations(1:step);
 
 %% Package outputs
 results.sumGICSubs     = sumGICSubs;
@@ -350,11 +284,92 @@ results.windingBlocked = windingBlocked;
 results.parallelGroups = parallelGroups;
 results.modeStr        = modeStr;
 
-%% Save and plot
+%% Save results and plot
 save('mitigation_results.mat', ...
     'mitigations', 'sumGICSubs', 'maxTransGIC', 'maxLinesGIC', ...
     'maxTransName', 'maxLineName');
 
+save('mitigation_results_full.mat', 'results')
 plotGICMitigationResults(results);
+
+% Save results using modeStr in filename 
+safeModeStr = regexprep(string(modeStr), '[^A-Za-z0-9_\-]', '_');
+fname = sprintf('mitigation_results_%s.mat', char(safeModeStr));
+fullfileSave = fullfile(pwd, fname);
+save(fullfileSave, 'mitigations', 'sumGICSubs', 'maxTransGIC', 'maxLinesGIC', ...
+    'maxTransName', 'maxLineName', 'results');
+app.StatusTextArea.Value = [app.StatusTextArea.Value; ...
+    sprintf('Saved results to %s', fullfileSave)];
+app.StatusTextArea.scroll('bottom');
+drawnow limitrate;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+%% ── Nested helper: extract GIC metrics from a GIC struct ─────────────────
+    function [sumVal, maxT, maxTName, maxL, maxLName] = extractMetrics(GIC)
+        % Total substation GIC: sum each substation column, take the max
+        subsAbs = abs(GIC.Subs);
+        totPerT = sum(subsAbs, 1, 'omitnan');
+        sumVal  = max(totPerT, [], 'omitnan');
+
+        % Max transformer winding GIC
+        if isfield(GIC, 'Trans') && ~isempty(GIC.Trans)
+            transAbs       = abs(GIC.Trans);
+            [maxT, linIdx] = max(transAbs, [], 'all', 'omitnan');
+
+            if isempty(maxT) || isnan(maxT)
+                maxT = 0; maxTName = "None";
+            else
+                [tIdx, wIdx] = ind2sub(size(transAbs), linIdx);
+                if isfield(app.T(tIdx), 'Name')
+                    maxTName = string(app.T(tIdx).Name) + " (W" + wIdx + ")";
+                else
+                    maxTName = "Transformer " + tIdx + " (W" + wIdx + ")";
+                end
+            end
+        else
+            maxT = 0; maxTName = "None";
+        end
+
+        % Max line GIC
+        if isfield(GIC, 'Lines') && ~isempty(GIC.Lines)
+            linesAbs       = abs(GIC.Lines);
+            [maxL, linIdx] = max(linesAbs, [], 'all', 'omitnan');
+
+            if isempty(maxL) || isnan(maxL)
+                maxL = 0; maxLName = "None";
+            else
+                [lIdx, ~] = ind2sub(size(linesAbs), linIdx);
+                if isfield(app.L(lIdx), 'Name')
+                    maxLName = string(app.L(lIdx).Name);
+                else
+                    maxLName = "Line " + lIdx;
+                end
+            end
+        else
+            maxL = 0; maxLName = "None";
+        end
+    end
 
 end

@@ -25,7 +25,7 @@ try
     
         % Map UI text to internal modeStr
         switch modeUI
-            case 'Mode 1: More feasible solution'
+            case 'Mode 1: All Lines and Neutral Blockers'
                 modeStr = 'original';
     
             case 'Mode 2: Neutral blockers (all wye windings)'

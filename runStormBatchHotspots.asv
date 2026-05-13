@@ -34,6 +34,22 @@ function results = runStormBatchHotspots(app, S, L, T)
     [fileNames, pathName] = uigetfile('*.mat', ...
         'Select E-field event .mat files', 'MultiSelect', 'on');
     
+% If user selected Cancel in uigetfile, fileNames will be 0. Handle that later,
+% but ensure pathName is a char (empty if canceled)
+if isequal(fileNames,0)
+    pathName = '';
+else
+    % If user selected a single file, uigetfile can return char for pathName on
+    % some MATLAB versions; ensure it's a char row for fullfile usage below.
+    if iscell(pathName)
+        pathName = pathName{1};
+    end
+end
+
+% Note: The saved event .mat files are expected to contain a struct 'data'
+% with fields ex, ey, latq, lonq, tind, and b.times. The snippet from the
+% caller shows how such a file can be created (using uiputfile). Nothing
+% else needs to be done here before proceeding to loading the files.    
     if isequal(fileNames,0)
         results = struct();
         return;

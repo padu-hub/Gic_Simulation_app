@@ -54,8 +54,6 @@ function magneticVisualTab(app, magPanel, controlPanel, mapPanel)
 %% === Reset Button Logic ===
     function reset_b_data()
         app.b_cleaned = app.b_original;
-        siteNames = string({app.b_cleaned.site});
-        app.SiteListBox.Items = siteNames;
         app.b_freq = conv_to_freqD(app.b_cleaned, app.freqmenu);
         assignin('base', 'b_cleaned', app.b_cleaned);
         app.EditLamp.Color = [0 1 0];  % Green (reset)
@@ -100,9 +98,8 @@ function remove_mag_site(app, siteIndices, magPanel, mapPanel)
         end
     end
     
-    % Refresh UI 
+     
     app.SiteListBox.Items = string({app.b_cleaned.site});
-    app.siteIndices = siteIndices;
     replot_mag_time_and_freq(app, siteIndices, magPanel);
     replot_mag_map(app, siteIndices, mapPanel);
     app.EditLamp.Color = [1 0.6 0];  % indicate change (orange)
