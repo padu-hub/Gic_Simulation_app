@@ -7,7 +7,7 @@ function drawArrows(app, x, y, u, v, n, scale)
         
         % Calculate base and tip positions for the shaft
         baseX = x(i); baseY = y(i);
-        tipX = baseX + scaledU; tipY = baseY + scaledV;
+        tipX = baseX - scaledU; tipY = baseY - scaledV;
 
         % Update shaft handles
         app.shaftHandles(i).XData = [baseX, tipX];
@@ -29,10 +29,10 @@ function drawArrows(app, x, y, u, v, n, scale)
         ny = ux;
 
         % Arrowhead corners (triangle)
-        leftX  = tipX + headLength * ux + headWidth * nx;
-        leftY  = tipY + headLength * uy + headWidth * ny;
-        rightX = tipX + headLength * ux - headWidth * nx;
-        rightY = tipY + headLength * uy - headWidth * ny;
+        leftX  = tipX - headLength * ux - headWidth * nx;
+        leftY  = tipY - headLength * uy - headWidth * ny;
+        rightX = tipX - headLength * ux + headWidth * nx;
+        rightY = tipY - headLength * uy + headWidth * ny;
 
         
         % Update arrow handles

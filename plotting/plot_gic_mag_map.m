@@ -105,7 +105,7 @@ switch mode
         % === Plot 1: Full Alberta map (no E-field) ===
         figure;
         worldmap(latLimFull, lonLimFull);
-        setm(gca, 'FontSize', 12);
+        setm(gca, 'FontSize', 14);
         hold on;
 
         drawBaseMapAndData(L, subLat, subLon, gicVals, cVals, "geoshow");
@@ -117,6 +117,7 @@ switch mode
         if ~isempty(answer)
             figure;
             ax= worldmap(latLimClose, lonLimClose);
+            setm(ax, 'FontSize', 14);
             hold on;
 
             [A, RA] = readBasemapImage("streets", latLimClose, lonLimClose);
@@ -141,10 +142,11 @@ switch mode
             ey_t = ey(idx,:).';
 
             axes(ax);                            % make ax current
-            quiverm(app.lat_s(:), app.lon_s(:), -10*ey_t(:),-10*ex_t(:));
+            q = quiverm(app.lat_s(:), app.lon_s(:), ey_t(:), ex_t(:));
+            set(q, 'Color', [0.57, 0.14, 0.71]); 
+            
     
-    
-            drawBaseMapAndData(L, subLat, subLon, gicVals, cVals , "real");
+            drawBaseMapAndData(app.L_plot, subLat, subLon, gicVals, cVals , "real");
             
             % Remove colorbar from the close-up map (second figure)
             cbClose = findobj(gcf, 'Type', 'ColorBar');
@@ -155,7 +157,7 @@ switch mode
             % === Overlay E-field only on close-up map ===
             %emaxT = plotEfield(app, b, subLat, subLon);
     
-            title([titleStr, '- Close-Up at ', emaxT], 'FontSize', 16);
+            %title([titleStr, '- Close-Up at ', emaxT], 'FontSize', 16);
             hold off;
         end
     otherwise
@@ -203,6 +205,7 @@ function drawBaseMapAndData(L, subLat, subLon, gicVals, cVals,type)
 
     cb = colorbar;
     cb.Label.String = 'GIC (A/phase)';
+    cb.Label.FontSize = 16; 
     colormap(redblue(20));
 
     % === Symmetric color scaling ===
