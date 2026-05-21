@@ -39,10 +39,15 @@ switch mode
         subLoc = reshape([S(:).Loc], 2, []).';
         subLat = subLoc(:,1);
         subLon = subLoc(:,2);
+        
+        % === Automatic limits ===
+        % latLimFull = [min(subLat), max(subLat)];
+        % lonLimFull = [min(subLon), max(subLon)];
 
-        % === Automatic Alberta limits ===
-        latLimFull = [min(subLat), max(subLat)];
-        lonLimFull = [min(subLon), max(subLon)];
+        % === Alberta province limits ===
+        latLimFull = [49.0, 60.0];
+        lonLimFull = [-120.0, -110.0];
+        
         latPad = 0.1 * diff(latLimFull);
         lonPad = 0.1 * diff(lonLimFull);
 
@@ -108,7 +113,7 @@ switch mode
         setm(gca, 'FontSize', 14);
         hold on;
 
-        drawBaseMapAndData(L, subLat, subLon, gicVals, cVals, "geoshow");
+        drawBaseMapAndData(L, app.OriginalL, app.L_plot, subLat, subLon, gicVals, cVals, "geoshow");
 
         %title([titleStr, ' - Full Alberta'], 'FontSize', 14);
         hold off;
@@ -146,7 +151,7 @@ switch mode
             set(q, 'Color', [0.57, 0.14, 0.71]); 
             
     
-            drawBaseMapAndData(app.L_plot, subLat, subLon, gicVals, cVals , "real");
+            drawBaseMapAndData(L, app.OriginalL, app.L_plot, subLat, subLon, gicVals, cVals , "real");
             
             % Remove colorbar from the close-up map (second figure)
             cbClose = findobj(gcf, 'Type', 'ColorBar');
@@ -166,7 +171,7 @@ end
 end
    
 
-function drawBaseMapAndData(L, subLat, subLon, gicVals, cVals,type)
+function drawBaseMapAndData(L, L_Original,L_plot, subLat, subLon, gicVals, cVals,type)
 % =========================================================================
 % DRAWBASEMAPANDDATA
 % Draws provinces/states, transmission lines, substations, and cities.
@@ -186,17 +191,32 @@ function drawBaseMapAndData(L, subLat, subLon, gicVals, cVals,type)
         end
     end
 
+    
+
+    % Find indices of struct elements that differ
+openIdx = find(~arrayfun(@(i) isequaln(L(i).Resistance, L_Original(i).Resistance), 1:numel(L)));
+
+
     % === Transmission lines ===
     for k = 1:numel(L)
-        lat = L(k).Loc(:,1);
-        lon = L(k).Loc(:,2);
+
+
+        lat = L_plot(k).Loc(:,1);
+        lon = L_plot(k).Loc(:,2);
 
         lineColor = 'r';
-        if isfield(L(k), 'Voltage') && L(k).Voltage >= 400
-            lineColor = 'b';
+        
+        % If this line index is in openIdx, plot it grey elso continue
+        % with the normal voltga color scheme.
+        if any(openIdx == k)
+            plotm(lat, lon, '-', 'Color', [0.5 0.5 0.5], 'LineWidth', 1.5);
+        else 
+            if isfield(L(k), 'Voltage') && L(k).Voltage >= 400
+                lineColor = 'b';
+            end
+    
+            plotm(lat, lon, '-', 'Color', lineColor, 'LineWidth', 1.5);
         end
-
-        plotm(lat, lon, '-', 'Color', lineColor, 'LineWidth', 1.5);
     end
 
     % === Substation bubbles ===

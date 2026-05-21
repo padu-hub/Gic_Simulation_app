@@ -185,3 +185,22 @@ existing   = dropFields(isfield(s, dropFields));
 out        = rmfield(s, existing);
 end
 
+function tf = needOriginal(app, L, T, L0, T0)
+% Return true (1) when originals must be (re)computed exactly once.
+% Per request: return 1 when network is not changed and cached originals are empty.
+
+% If networks changed, we do not force original-only computation here
+% (editedChanged is handled elsewhere via isNetworkChanged)
+if isNetworkChanged(app, L, T, L0, T0)
+    tf = false;
+    return;
+end
+
+% Check cached originals - treat missing or empty as needing computation
+hasS = isprop(app, 'gic_originalS') && ~isempty(app.gic_originalS);
+hasL = isprop(app, 'gic_originalL') && ~isempty(app.gic_originalL);
+hasT = isprop(app, 'gic_originalT') && ~isempty(app.gic_originalT);
+
+% Need to run originals once only when none are present
+tf = ~(hasS || hasL || hasT);
+end
