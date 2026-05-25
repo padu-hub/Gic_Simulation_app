@@ -301,18 +301,19 @@ results.AnonVariableMap = struct('Original', {varNames}, 'Anon', {cellstr(anonVa
 
 % Simple single-line outage sweep: turn off each candidate line one-at-a-time,
 % run GIC, record maximum GIC change per substation, then reset network.
-nLinesAll = numel(L0); % a
+nLinesAll = numel(L0); % assume L0 contains all lines; if only candidates desired, use linePool
 % If intention is to test only candidate lines, uncomment next line:
 % nLinesAll = numel(linePool);
 
 % Prepare storage: rows = simulations (one per line turned off), cols = substations
-nSubs = numel(S); % number of substations/transformer entries assumed equal to T0 length
+nSubs = numel(T0); % number of substations/transformer entries assumed equal to T0 length
 lineSweepNames = strings(nLinesAll,1);
 gicMaxPerSub = nan(nLinesAll, nSubs);
 
 for li = 1:nLinesAll
     % Reset network to original
     app.L = app.OriginalL; % restore lines
+    app.T = app.OriginalT; % restore transformers if needed (keep consistent)
     
     % Determine which line index in L0 to open
     if exist('linePool','var') && numel(linePool)==nLinesAll

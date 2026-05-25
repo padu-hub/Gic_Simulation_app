@@ -192,6 +192,7 @@ function results = runStormBatchHotspots(app, S, L, T)
         % -----------------------------
         % Substations: moving mean of absolute GIC across time
         sub_mov = movmean(abs(gicSubs), wSamp, 2, 'Endpoints', 'shrink'); % [nSubs x nTime]
+        results.events(i).sub_movmean15 = sub_mov;
 
         % Lines
         if ismatrix(gicLine) && size(gicLine,2) == numel(tind)
@@ -199,7 +200,7 @@ function results = runStormBatchHotspots(app, S, L, T)
         else
             line_mov = nan(nLines, numel(tind));
         end
-        
+        results.events(i).line_movmean15 = line_mov;
 
         % Transformers: W1 and W2
         if ndims(gicTrans) == 3 && size(gicTrans,3) == numel(tind)
@@ -236,7 +237,6 @@ function results = runStormBatchHotspots(app, S, L, T)
         results.events(i).line_max15      = line_max15;
         results.events(i).trans_max15_w1  = trans_max15_w1;
         results.events(i).trans_max15_w2  = trans_max15_w2;
-        results.events(i).sub_movmean15 = sub_mov;
         results.events(i).line_movmean15 = line_mov;
         results.events(i).trans_movmean15_w1 = w1_mov;
         results.events(i).trans_movmean15_w2 = w2_mov;
