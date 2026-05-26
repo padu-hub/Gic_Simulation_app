@@ -1,5 +1,4 @@
-
-function results = runGIC_outage_sweep(app)
+function results = runMultiMitigations(app)
 
 % ============================================================
 % OUTAGE SWEEP ANALYSIS FOR GIC NETWORK
@@ -60,14 +59,15 @@ gicMatrix = nan(nRuns, nSubs);
 % STEP 4: LINE OUTAGE SWEEP
 % ============================================================
 
-for i = 1:nLines
+for i = 1:2
 
     % reset system
+
     app.L = L0;
     app.T = T0;
 
     % trip line
-    app.L(i).Resistance = 0;
+    app.L(i).Resistance = inf;
 
     % name
     if isfield(L0(i),'Name')
@@ -80,6 +80,7 @@ for i = 1:nLines
     [~, ~, ~, GIC] = runGIC_now(app);
     subsNow = abs(GIC.Subs);
 
+
     % max change per substation
     gicMatrix(i,:) = max(subsNow - baseSubs, [], 2, 'omitnan')';
 
@@ -89,7 +90,7 @@ end
 % STEP 5: TRANSFORMER OUTAGE SWEEP
 % ============================================================
 
-for j = 1:size(transPool,1)
+for j = 1:2%size(transPool,1)
 
     app.L = L0;
     app.T = T0;
@@ -99,14 +100,14 @@ for j = 1:size(transPool,1)
 
     if wIdx == 1
         % -------------------- OPEN WINDING 1 ONLY --------------------
-        if isfield(app.T(tIdx),'w1')
-            app.T(tIdx).w1 = inf;
+        if isfield(app.T(tIdx),'W1')
+            app.T(tIdx).W1 = inf;
         end
     
     elseif wIdx == 2
         % -------------------- OPEN WINDING 2 ONLY --------------------
-        if isfield(app.T(tIdx),'w2')
-            app.T(tIdx).w2 = inf;
+        if isfield(app.T(tIdx),'W2')
+            app.T(tIdx).W2 = inf;
         end
     end
 
@@ -115,7 +116,7 @@ for j = 1:size(transPool,1)
     [~, ~, ~, GIC] = runGIC_now(app);
     subsNow = abs(GIC.Subs);
 
-    gicMatrix(nLines + j,:) = max(subsNow - baseSubs, [], 1, 'omitnan');
+    gicMatrix(nLines + j,:) = max(subsNow - baseSubs, [], 2, 'omitnan')';
 
 end
 
@@ -134,7 +135,8 @@ gicMatrix = gicMatrix(:, keepSubs);
 % ============================================================
 
 runImpact = max(gicMatrix, [], 2, 'omitnan');
-[~, idxSort] = sort(runImpact, 'descend');
+[~, idxSort] = sort(runImpact, 'descend', 'MissingPlacement', 'last');
+
 
 topN = min(50, numel(idxSort));
 idxKeepRuns = idxSort(1:topN);

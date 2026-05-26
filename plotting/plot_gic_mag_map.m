@@ -113,7 +113,7 @@ switch mode
         setm(gca, 'FontSize', 14);
         hold on;
 
-        drawBaseMapAndData(L, app.OriginalL, app.L_plot, subLat, subLon, gicVals, cVals, "geoshow");
+        drawBaseMapAndData(L, app.OriginalL, app.L_plot, subLat, subLon, gicVals, cVals, "geoshow", 10);
 
         %title([titleStr, ' - Full Alberta'], 'FontSize', 14);
         hold off;
@@ -151,7 +151,7 @@ switch mode
             set(q, 'Color', [0.57, 0.14, 0.71]); 
             
     
-            drawBaseMapAndData(L, app.OriginalL, app.L_plot, subLat, subLon, gicVals, cVals , "real");
+            drawBaseMapAndData(L, app.OriginalL, app.L_plot, subLat, subLon, gicVals, cVals , "real", 40);
             
             % Remove colorbar from the close-up map (second figure)
             cbClose = findobj(gcf, 'Type', 'ColorBar');
@@ -171,7 +171,7 @@ end
 end
    
 
-function drawBaseMapAndData(L, L_Original,L_plot, subLat, subLon, gicVals, cVals,type)
+function drawBaseMapAndData(L, L_Original,L_plot, subLat, subLon, gicVals, cVals,type, scale)
 % =========================================================================
 % DRAWBASEMAPANDDATA
 % Draws provinces/states, transmission lines, substations, and cities.
@@ -194,7 +194,7 @@ function drawBaseMapAndData(L, L_Original,L_plot, subLat, subLon, gicVals, cVals
     
 
     % Find indices of struct elements that differ
-openIdx = find(~arrayfun(@(i) isequaln(L(i).Resistance, L_Original(i).Resistance), 1:numel(L)));
+    openIdx = find(~arrayfun(@(i) isequaln(L(i).Resistance, L_Original(i).Resistance), 1:numel(L)));
 
 
     % === Transmission lines ===
@@ -220,7 +220,7 @@ openIdx = find(~arrayfun(@(i) isequaln(L(i).Resistance, L_Original(i).Resistance
     end
 
     % === Substation bubbles ===
-    scatterm(subLat, subLon, 30 + 30*abs(gicVals), cVals, ...
+    scatterm(subLat, subLon, scale + scale*abs(gicVals), cVals, ...
         'filled', 'MarkerEdgeColor', 'k');
 
     cb = colorbar;
@@ -251,5 +251,6 @@ openIdx = find(~arrayfun(@(i) isequaln(L(i).Resistance, L_Original(i).Resistance
         textm(cities{i,2}, cities{i,3}, cities{i,1}, ...
             'FontSize', 8, 'VerticalAlignment', 'top');
     end
+    
 end
 
