@@ -44,10 +44,16 @@ function startupSandbox(app)
 
     grid(app.SandboxAxes,'on')
 
-    axis(app.SandboxAxes,[0 100 0 100])
+    axis(app.SandboxAxes,...
+    [app.SandboxXMin ...
+     app.SandboxXMax ...
+     app.SandboxYMin ...
+     app.SandboxYMax])
 
-    app.SandboxAxes.XLim = [0 100];
-    app.SandboxAxes.YLim = [0 100];
+    app.SandboxAxes.XLim =[app.SandboxXMin ...
+     app.SandboxXMax];
+    app.SandboxAxes.YLim = [app.SandboxYMin ...
+     app.SandboxYMax];
 
     app.SandboxAxes.DataAspectRatio = [1 1 1];
 
