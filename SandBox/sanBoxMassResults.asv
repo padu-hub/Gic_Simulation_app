@@ -1,0 +1,206 @@
+function sanBoxMassResults (app)
+% =====================================================
+% Save Original Network
+% =====================================================
+S0 = app.SandboxS;
+L0 = app.SandboxL;
+T0 = app.SandboxT;
+
+% =====================================================
+% Mitigation Definition
+% =====================================================
+
+Mit.Name = 'Example Mitigation';
+Mit.Type = {'L'};   %L, S, T
+Mit.Index = {3};     %Which sub, line, transformer
+Mit.Field = {'Resistance'};
+Mit.Operation = {'multiply'};   % set / add / multiply
+
+Mit.Values = {0.1:0.1:2}; 
+
+% =====================================================
+% Results
+% =====================================================
+Results = struct([]);
+
+
+% =====================================================
+% Sweep Values
+% =====================================================
+for i = 1:length(Mit(1).Values)
+
+    val = Mit.Values(i);
+
+    S = S0;
+    L = L0;
+    T = T0;
+
+    % =================================================
+    % Apply All Changes
+    % =================================================
+    for m = 1:length(Mit.Type)
+
+        type = Mit.Type{m};
+        idx = Mit.Index{m};
+        field = Mit.Field{m};
+        op = Mit.Operation{m};
+
+        switch type
+
+            % -----------------------------------------
+            % Substation
+            % -----------------------------------------
+            case 'S'
+
+                oldVal = S0(idx).(field);
+
+                switch op
+
+                    case 'set'
+
+                        S(idx).(field) = val;
+
+                    case 'add'
+
+                        S(idx).(field) = ...
+                            oldVal + val;
+
+                    case 'multiply'
+
+                        S(idx).(field) = ...
+                            oldVal * val;
+
+                end
+
+            % -----------------------------------------
+            % Line
+            % -----------------------------------------
+            case 'L'
+
+                oldVal = L0(idx).(field);
+
+                switch op
+
+                    case 'set'
+
+                        L(idx).(field) = val;
+
+                    case 'add'
+
+                        L(idx).(field) = ...
+                            oldVal + val;
+
+                    case 'multiply'
+
+                        L(idx).(field) = ...
+                            oldVal * val;
+
+                end
+
+            % -----------------------------------------
+            % Transformer
+            % -----------------------------------------
+            case 'T'
+
+                oldVal = T0(idx).(field);
+
+                switch op
+
+                    case 'set'
+
+                        T(idx).(field) = val;
+
+                    case 'add'
+
+                        T(idx).(field) = ...
+                            oldVal + val;
+
+                    case 'multiply'
+
+                        T(idx).(field) = ...
+                            oldVal * val;
+
+                end
+
+        end
+
+    end
+
+    % =================================================
+    % Update Line Geometry
+    % =================================================
+    for k = 1:length(L)
+
+        fromSub = sscanf( ...
+            L(k).fromSub,...
+            '%*[^0-9]%d');
+
+        toSub = sscanf( ...
+            L(k).toSub,...
+            '%*[^0-9]%d');
+
+        p1 = [
+            S(fromSub).Longitude
+            S(fromSub).Latitude
+            ];
+
+        p2 = [
+            S(toSub).Longitude
+            S(toSub).Latitude
+            ];
+
+        len = norm(p2-p1);
+
+        L(k).Length = len;
+
+        if isfield(L(k),'ResKm')
+
+            if ~isnan(L(k).ResKm)
+
+                L(k).Resistance = ...
+                    L(k).ResKm * len;
+
+            end
+
+        end
+
+        L(k).Loc = [
+            p1(2) p1(1)
+            p2(2) p2(1)
+            ];
+
+    end
+    
+    [Ssim,Lsim,Tsim,latq,lonq] = buildSandboxSimulationNetwork(app);
+    
+    % =================================================
+    % Run Simulation
+    % =================================================
+    % --- Run calculation
+    [~,~,~,app.GIC_sandBox,~,~,~,~] = ...
+        calc_gic_main( ...
+        app,...
+        Ssim,...
+        Lsim,...
+        Tsim,...
+        app.EfieldValueEditField.Value,...
+        [],...
+        latq,...
+        lonq,...
+        [],...
+        Lsim,...
+        Tsim);
+
+end
+
+% =====================================================
+% Rank
+% =====================================================
+scores = [Results.MaxSubGIC];
+
+[~,order] = sort(scores);
+
+Results = Results(order);
+
+
+end
