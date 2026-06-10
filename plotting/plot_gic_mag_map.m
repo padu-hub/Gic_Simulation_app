@@ -226,7 +226,7 @@ function drawBaseMapAndData(L, L_Original,L_plot, subLat, subLon, gicVals, cVals
     cb = colorbar;
     cb.Label.String = 'GIC (A/phase)';
     cb.Label.FontSize = 16; 
-    colormap(redblue(20));
+    colormap(redblue(30));
 
     % === Symmetric color scaling ===
     maxAbs = max(abs(cVals(:)));

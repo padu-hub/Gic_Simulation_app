@@ -8,7 +8,7 @@ function drawSandboxNetwork(app)
     hold(app.SandboxAxes,'on')
     grid(app.SandboxAxes,'on')
 
-    axis(app.SandboxAxes,[0 100 0 100])
+    axis(app.SandboxAxes,[-50 50 -50 50])
 
     app.SandboxAxes.XTick = [];
     app.SandboxAxes.YTick = [];
@@ -16,7 +16,7 @@ function drawSandboxNetwork(app)
     % -------------------------------------------------------------
     % Preallocate Handle Arrays
     % -------------------------------------------------------------
-    app.SandboxLineHandles = gobjects(length(app.SandboxL),1);
+    app.SandboxLineHandles = gobjects(length(app.OriginalSandboxL),1);
 
     app.SandboxNodeHandles = gobjects(length(app.SandboxS),1);
 
@@ -25,7 +25,7 @@ function drawSandboxNetwork(app)
     % -------------------------------------------------------------
     % Draw Lines
     % -------------------------------------------------------------
-    for k = 1:length(app.SandboxL)
+    for k = 1:length(app.OriginalSandboxL)
 
         fromSub = app.OriginalSandboxL(k).fromSub;
         toSub   = app.OriginalSandboxL(k).toSub;

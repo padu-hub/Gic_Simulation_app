@@ -110,7 +110,7 @@ function buildLineControls(app)
         rGrid = uigridlayout(g);
 
         rGrid.RowHeight = {'1x'};
-        rGrid.ColumnWidth = {40,25,40,25,40,25};
+        rGrid.ColumnWidth = {40,30,40,30,40,30};
 
         rGrid.Padding = [0, 0, 0, 0];
         rGrid.RowSpacing = 0;

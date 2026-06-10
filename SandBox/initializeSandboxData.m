@@ -10,12 +10,12 @@ function initializeSandboxData(app)
     % Default Substation Coordinates
     % =====================================================
     xy = [
-        40 50 ;   % S1
-        60 50 ;   % S2
-        80 75 ;   % S3
-        80 25 ;   % S4
-        20 25 ;   % S5
-        20 75     % S6
+        -10   0 ;   % S1
+         10   0 ;   % S2
+         30  25 ;   % S3
+         30 -25 ;   % S4
+        -30 -25 ;   % S5
+        -30  25     % S6
         ];
 
     % =====================================================
@@ -77,7 +77,7 @@ function initializeSandboxData(app)
 
         app.SandboxL(k).Resistance = ...
         app.SandboxL(k).ResKm * len;
-        app.OriginalSandboxL= app.SandboxL
+        app.OriginalSandboxL= app.SandboxL;
 
     end
 

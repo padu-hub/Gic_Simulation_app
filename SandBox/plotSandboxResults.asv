@@ -3,15 +3,15 @@ function plotSandboxResults( ...
     theta,...
     GICSubsResults,...
     GICLinesResults,...
-    I_indResults,...
+    EMFResults,...
     GICLinesResultsOld,...
     GICSubsResultsOld, ...
-    I_indResultsOld)
+    EMFResultsOld)
 
     % Clear Existing Plots
-    cla(app.SBUIAxes, 'reset')
-    cla(app.SBUIAxes2, 'reset')
-    cla(app.SBUIAxes3, 'reset')
+    cla(app.SBUIAxes)
+    cla(app.SBUIAxes2)
+    cla(app.SBUIAxes3)
 
     showPrev = (isprop(app,'ShowPreviousResultCheckBox') && ...
                 app.ShowPreviousResultCheckBox.Value == 1);
@@ -32,35 +32,21 @@ function plotSandboxResults( ...
     colorOrder = ax.ColorOrder;
     nColors = size(colorOrder,1);
 
-    n = numel(app.SandboxL);
     for k = 1:nSubs
-        % always plot 1 and 2
-        if k <= 2
-            doPlot = true;
-        else
-            prev = k - 1;
-            % only check SandboxL(prev) when prev is in range
-            if prev <= n && isnan(app.SandboxL(prev).Resistance)
-                doPlot = false;
-            else
-                doPlot = true;
-            end
-        end
-    
-        if ~doPlot
-            continue
-        end
-    
         col = colorOrder(mod(k-1,nColors)+1,:);
-        if showPrev
-            plot(ax, theta, GICSubsResultsOld(k,:), ...
+
+        % Plot old first
+        if ~showPrev && ~isempty(GICSubsResultsOld)
+            pOld = plot(ax, theta, GICSubsResultsOld(k,:), ...
                 'LineWidth',1.5, 'LineStyle',':', ...
                 'Color', col, 'HandleVisibility','off', 'DisplayName','');
         end
-    
+
+        % Plot current (solid) and bring to top
         pCurr = plot(ax, theta, GICSubsResults(k,:), ...
             'LineWidth',1.5, 'LineStyle','-', ...
             'Color', col, 'DisplayName', app.SandboxS(k).Name);
+        % ensure solid is on top
         uistack(pCurr,'top');
     end
     hold(ax,'off')
@@ -80,20 +66,18 @@ function plotSandboxResults( ...
     nLines = size(GICLinesResults,1);
 
     for k = 1:nLines
-        if ~isnan(app.SandboxL(k).Resistance)
-            col = colorOrder(mod(k-1,nColors)+1,:);
-    
-            if showPrev 
-                plot(ax, theta, GICLinesResultsOld(k,:), ...
-                    'LineWidth',1.5, 'LineStyle',':', ...
-                    'Color', col, 'HandleVisibility','off', 'DisplayName','');
-            end
-    
-            pCurr = plot(ax, theta, GICLinesResults(k,:), ...
-                'LineWidth',1.5, 'LineStyle','-', ...
-                'Color', col, 'DisplayName', app.SandboxL(k).Name);
-            uistack(pCurr,'top');
+        col = colorOrder(mod(k-1,nColors)+1,:);
+
+        if ~showPrev && ~isempty(GICLinesResultsOld)
+            plot(ax, theta, GICLinesResultsOld(k,:), ...
+                'LineWidth',1.5, 'LineStyle',':', ...
+                'Color', col, 'HandleVisibility','off', 'DisplayName','');
         end
+
+        pCurr = plot(ax, theta, GICLinesResults(k,:), ...
+            'LineWidth',1.5, 'LineStyle','-', ...
+            'Color', col, 'DisplayName', app.SandboxL(k).Name);
+        uistack(pCurr,'top');
     end
     hold(ax,'off')
     grid(ax,'on')
@@ -103,34 +87,33 @@ function plotSandboxResults( ...
     legend(ax,'show')
 
     % -------------------------
-    % Induced Currents
+    % EMFs
     % -------------------------
     ax = app.SBUIAxes3;
     hold(ax,'on')
     colorOrder = ax.ColorOrder;
     nColors = size(colorOrder,1);
-    nEMFcols = size(I_indResults,2);
-    
+    nEMFcols = size(EMFResults,2);
+
     for k = 1:nEMFcols
-        if ~isnan(app.SandboxL(k).Resistance)
-            col = colorOrder(mod(k-1,nColors)+1,:);
-            if showPrev
-            plot(ax, theta, I_indResultsOld(:,k), ...
-            'LineWidth',1.5, 'LineStyle',':', ...
-            'Color', col, 'HandleVisibility','off', 'DisplayName','');
-            end
-            
-            pCurr = plot(ax, theta, I_indResults(:,k), ...
+        col = colorOrder(mod(k-1,nColors)+1,:);
+
+        if ~showPrev && ~isempty(EMFResultsOld)
+            plot(ax, theta, EMFResultsOld(:,k), ...
+                'LineWidth',1.5, 'LineStyle',':', ...
+                'Color', col, 'HandleVisibility','off', 'DisplayName','');
+        end
+
+        pCurr = plot(ax, theta, EMFResults(:,k), ...
             'LineWidth',1.5, 'LineStyle','-', ...
             'Color', col, 'DisplayName', app.SandboxL(k).Name);
-            uistack(pCurr,'top');
-        end
+        uistack(pCurr,'top');
     end
     hold(ax,'off')
     grid(ax,'on')
     xlabel(ax,'E-Field Orientation (deg)')
-    ylabel(ax,'Induced Current (A)')
-    title(ax,'Induced current vs E-Field Orientation')
+    ylabel(ax,'EMF (V)')
+    title(ax,'Line EMF vs E-Field Orientation')
     legend(ax,'show')
 
 end
