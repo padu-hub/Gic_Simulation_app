@@ -112,7 +112,11 @@ if uniform
             calc_gic(L, T, Vu, Yn, Ye, nodePairs, nodeRes, autoind, indices, edges, ...
             indnull, indnotnull, nBus);
     end
-    iInduced = Vu./[L.Resistance];          % resistance for line k;
+    if isempty(Vu)
+        iInduced = [];
+    else
+        iInduced = Vu./[L.Resistance];
+    end
 elseif sandBoxMode
     for i = 1:nTimes
         Ey = ex*cosd(theta(i)); %East
@@ -155,7 +159,11 @@ else
             appendStatus(app, sprintf('...%d%% complete', pct));
         end
     end
-    iInduced = V./[L.Resistance];
+    if isempty(V)
+        iInduced = [];
+    else
+        iInduced = V./[L.Resistance];
+    end
 end
 
 elapsedTime = toc;

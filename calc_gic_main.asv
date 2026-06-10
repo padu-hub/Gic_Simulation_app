@@ -112,7 +112,12 @@ if uniform
             calc_gic(L, T, Vu, Yn, Ye, nodePairs, nodeRes, autoind, indices, edges, ...
             indnull, indnotnull, nBus);
     end
-    iInduced = Vu/L.Resistance;          % resistance for line k;
+    if isempty(Vu)
+        iInduced = [];
+    else
+        iInduced = Vu./[L.Resistance];
+    end
+    iInduced = Vu./[L.Resistance];          % resistance for line k;
 elseif sandBoxMode
     for i = 1:nTimes
         Ey = ex*cosd(theta(i)); %East
@@ -125,7 +130,7 @@ elseif sandBoxMode
         calc_gic(L, T, V(i,:), Yn, Ye, nodePairs, nodeRes, autoind, ...
         indices, edges, indnull, indnotnull, nBus);
     end
-    iInduced = V(:,)/L(:).Resistance;
+    iInduced = V./[L.Resistance];
 else
     milestoneThresh = [10 25 50 70 100];
     milestoneIdx    = unique(max(1, round(milestoneThresh / 100 * nTimes)));
@@ -155,7 +160,11 @@ else
             appendStatus(app, sprintf('...%d%% complete', pct));
         end
     end
-    iInduced = V/L.Resistance;
+    if isempty(V)
+        iInduced = [];
+    else
+        iInduced = V./[L.Resistance];
+    end
 end
 
 elapsedTime = toc;
