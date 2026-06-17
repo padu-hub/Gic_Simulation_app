@@ -2,14 +2,7 @@
 % Build Sandbox Simulation Network
 % -------------------------------------------------------------------------
 function [Ssim,Lsim,Tsim,latq,lonq] = ...
-    buildSandboxSimulationNetwork(app)
-
-    % =====================================================
-    % Copy Sandbox Network
-    % =====================================================
-    Ssim = app.SandboxS;
-    Lsim = app.SandboxL;
-    Tsim = app.SandboxT;
+    buildSandboxSimulationNetwork(app, Ssim, Lsim, Tsim)
 
     % =====================================================
     % Convert Substations To Real Coordinates
@@ -101,7 +94,8 @@ function [Ssim,Lsim,Tsim,latq,lonq] = ...
 
             Lsim(k).Resistance = ...
                 Lsim(k).ResKm * len;
-
+        else
+            Lsim(k).Resistance = NaN;
         end
 
     end
