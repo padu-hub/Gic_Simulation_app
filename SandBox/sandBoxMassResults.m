@@ -251,8 +251,9 @@ else
 end
 end
 
-%plotSandboxMassResults(currentResults,GIC_base,theta);
+plotSandboxMassResults(currentResults,GIC_base,theta);
 plotMaxGICvsStep(currentResults,GIC_base);
+app.sandBoxMode = 0;
 
 end
 
@@ -347,127 +348,124 @@ end
 
 
 
-% function plotSandboxMassResults(Results,GIC_base,theta)
-% 
+function plotSandboxMassResults(Results,GIC_base,theta)
+
 %     =====================================================
-%     Dimensions
+%    Dimensions
 %     =====================================================
-%     nSteps = length(Results);
-%     nSubs = size(Results(1).Subs,1);
-%     nAngles = size(Results(1).Subs,2);
-% 
-%     Step Values (e.g. Line Length)
-%     StepVals = zeros(nSteps,1);
-% 
-%     for i = 1:nSteps
-%         StepVals(i) = Results(i).Step;
-%     end
-% 
+    nSteps = length(Results);
+    nSubs = size(Results(1).Subs,1);
+    nAngles = size(Results(1).Subs,2);
+
+    %Step Values (e.g. Line Length)
+    StepVals = zeros(nSteps,1);
+
+    for i = 1:nSteps
+        StepVals(i) = Results(i).Step;
+    end
+
 %     =====================================================
 %     Build Delta GIC for Each Substation
 %     =====================================================
-%     DeltaSubs = zeros(nSteps,nAngles,nSubs);
-% 
-%     globalMax = 0;
-% 
-%     for step = 1:nSteps
-% 
-%         Current = abs(Results(step).Subs);
-%         Base    = abs(GIC_base(step).Subs);
-% 
-%         Delta = Current - Base;
-% 
-%         for s = 1:nSubs
-% 
-%             DeltaSubs(step,:,s) = Delta(s,:);
-% 
-%             globalMax = max( ...
-%                 globalMax,...
-%                 max(abs(Delta(s,:))));
-% 
-%         end
-% 
-%     end
-% 
-%     if globalMax == 0
-%         globalMax = 1;
-%     end
-% 
+    DeltaSubs = zeros(nSteps,nAngles,nSubs);
+
+    globalMax = 0;
+
+    for step = 1:nSteps
+
+        Current = abs(Results(step).Subs);
+        Base    = abs(GIC_base(step).Subs);
+
+        Delta = Current - Base;
+
+        for s = 1:nSubs
+
+            DeltaSubs(step,:,s) = Delta(s,:);
+
+            globalMax = max( ...
+                globalMax,...
+                max(abs(Delta(s,:))));
+
+        end
+
+    end
+
+    if globalMax == 0
+        globalMax = 1;
+    end
+
 %     -------------------------------------------------
 %     Find Relevant Substations
 %     -------------------------------------------------
-%     relevantSubs = [];
-% 
-%     for s = 1:nSubs
-% 
-%         Z = squeeze(DeltaSubs(:,:,s));
-% 
-%         if max(abs(Z(:))) >= 1
-%             relevantSubs(end+1) = s;
-%         end
-% 
-%     end
-% 
-%     nRelevant = length(relevantSubs);
-% 
-%     nRows = floor(sqrt(nRelevant));
-%     nCols = ceil(nRelevant/nRows);
-% 
-%     if nRows*nCols < nRelevant
-%         nRows = nRows + 1;
-%     end
+    relevantSubs = [];
+
+    for s = 1:nSubs
+
+        Z = squeeze(DeltaSubs(:,:,s));
+
+        if max(abs(Z(:))) >= 1
+            relevantSubs(end+1) = s;
+        end
+
+    end
+
+    nRelevant = length(relevantSubs);
+
+    nRows = floor(sqrt(nRelevant));
+    nCols = ceil(nRelevant/nRows);
+
+    if nRows*nCols < nRelevant
+        nRows = nRows + 1;
+    end
 %     =====================================================
 %     Plot Heatmaps
 %     =====================================================
-%     figure( ...
-%         'Color','w',...
-%         'Name','Substation GIC Change Heatmaps');
-% 
-%     t = tiledlayout(nRows,nCols,...
-%         'TileSpacing','compact',...
-%         'Padding','compact');
-% 
-%     title(t,...
-%         '\Delta|GIC| after diconnecting L1')
-% 
-%     for i = 1:nRelevant
-%         nexttile
-%         s = relevantSubs(i);
-% 
-%         Z = squeeze(DeltaSubs(:,:,s));
-% 
-%         imagesc( ...
-%             theta,...
-%             StepVals,...
-%             Z)
-% 
-%         axis xy
-% 
-%         xlabel( ...
-%             'E-Field Orientation (deg)')
-% 
-%         ylabel( ...
-%             'Line Length(km)')
-% 
-%         title( ...
-%             sprintf('Substation %d',s))
-% 
-%         localMax = max(abs(Z(:)));
-% 
-%         if localMax == 0
-%             localMax = 1;
-%         end
-% 
-%         clim([-localMax localMax])
-%         clim([-globalMax globalMax])
-% 
-%         colorbar
-% 
-%     end
-% 
-%     =====================================================
-%     Colormap
-%     =====================================================
-%     colormap(redblue(30));
-% 
-% end
+    figure( ...
+        'Color','w',...
+        'Name','Substation GIC Change Heatmaps');
+
+    t = tiledlayout(nRows,nCols,...
+        'TileSpacing','compact',...
+        'Padding','compact');
+
+    title(t,...
+        '\Delta|GIC| after diconnecting L1')
+
+    for i = 1:nRelevant
+        nexttile
+        s = relevantSubs(i);
+
+        Z = squeeze(DeltaSubs(:,:,s));
+
+        imagesc( ...
+            theta,...
+            StepVals,...
+            Z)
+
+        axis xy
+
+        xlabel( ...
+            'E-Field Orientation (deg)')
+
+        ylabel( ...
+            'Line Length(km)')
+
+        title( ...
+            sprintf('Substation %d',s))
+
+        localMax = max(abs(Z(:)));
+
+        if localMax == 0
+            localMax = 1;
+        end
+
+        clim([-localMax localMax])
+        clim([-globalMax globalMax])
+
+        colorbar
+
+    end
+
+    colormap(redblue(30));
+
+end
