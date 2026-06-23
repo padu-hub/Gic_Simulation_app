@@ -315,21 +315,50 @@ grid on
 
 colors = lines(nSubs);
 
+tol = 1e-6;
+
+used = false(1,nSubs);
+
 for s = 1:nSubs
+
+    if used(s)
+        continue
+    end
 
     % Skip insignificant substations
     if max(abs(DeltaPeak(:,s))) < 1
         continue
     end
 
+    group = s;
+
+    for t = s+1:nSubs
+
+        if max(abs( ...
+                DeltaPeak(:,s) - ...
+                DeltaPeak(:,t))) < tol
+
+            group(end+1) = t;
+            used(t) = true;
+
+        end
+
+    end
+
+    % -----------------------------------------
+    % Legend Name
+    % -----------------------------------------
+    label = sprintf('%d,',group);
+    label(end) = [];
+
     plot( ...
         stepVals,...
         DeltaPeak(:,s),...
-        '-.',...
+        '-',...
         'Color',colors(s,:),...
         'LineWidth',1.5,...
         'DisplayName',...
-        sprintf('Sub %d',s));
+        ['Sub ' label]);
 
 end
 

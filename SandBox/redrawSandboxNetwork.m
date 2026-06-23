@@ -80,6 +80,4 @@ function redrawSandboxNetwork(app)
 
     end
 
-    drawnow limitrate
-
 end

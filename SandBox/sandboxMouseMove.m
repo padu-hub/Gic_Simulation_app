@@ -1,8 +1,16 @@
 function sandboxMouseMove(app)
 
     if ~app.IsDragging
-        %% 
         return
+    end
+
+    if ~strcmp(app.UIFigure.SelectionType,'normal')
+
+        app.IsDragging = false;
+        app.SelectedNode = [];
+
+        return
+
     end
 
     cp = app.SandboxAxes.CurrentPoint;
@@ -13,7 +21,7 @@ function sandboxMouseMove(app)
     k = app.SelectedNode;
 
     app.SandboxS(k).Longitude = x;
-    app.SandboxS(k).Latitude = y;
+    app.SandboxS(k).Latitude  = y;
 
     app.SandboxS(k).Loc = [y x];
 

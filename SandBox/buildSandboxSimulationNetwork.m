@@ -2,7 +2,7 @@
 % Build Sandbox Simulation Network
 % -------------------------------------------------------------------------
 function [Ssim,Lsim,Tsim,latq,lonq] = ...
-    buildSandboxSimulationNetwork(app, Ssim, Lsim, Tsim)
+    buildSandboxSimulationNetwork(app,Ssim,Lsim,Tsim)
 
     % =====================================================
     % Convert Substations To Real Coordinates
@@ -16,34 +16,30 @@ function [Ssim,Lsim,Tsim,latq,lonq] = ...
         y = Ssim(k).Latitude;
 
         % -------------------------------------------------
-        % Convert To Projected Coordinates (m)
+        % Convert Sandbox -> UTM (m)
         % -------------------------------------------------
         easting = ...
-            app.SandboxOriginEasting + ...
-            x * app.SandboxScaleKm * 1000;
+            500000+(x * app.SandboxScaleKm * 1000);
 
         northing = ...
-            app.SandboxOriginNorthing + ...
             y * app.SandboxScaleKm * 1000;
 
         % -------------------------------------------------
-        % Convert To Lat/Lon
+        % Convert UTM -> Lat/Lon
         % -------------------------------------------------
-        [lat,lon] = projinv( ...
-            app.SandboxProj,...
+        [lon,lat] = utm2geo( ...
             easting,...
-            northing);
+            northing,...
+            app.SandboxCentralLongitude,...
+            app.SandboxOriginLatitude);
 
         % -------------------------------------------------
-        % Store Real Coordinates
+        % Store Coordinates
         % -------------------------------------------------
-        Ssim(k).Latitude = lat;
+        Ssim(k).Latitude  = lat;
         Ssim(k).Longitude = lon;
 
         Ssim(k).Loc = [lat lon];
-
-        Ssim(k).Easting = easting;
-        Ssim(k).Northing = northing;
 
     end
 
@@ -61,42 +57,41 @@ function [Ssim,Lsim,Tsim,latq,lonq] = ...
             '%*[^0-9]%d');
 
         % -------------------------------------------------
-        % Projected Coordinates
+        % Geographic Coordinates
         % -------------------------------------------------
-        E1 = Ssim(fromSub).Easting;
-        N1 = Ssim(fromSub).Northing;
+        lat1 = Ssim(fromSub).Latitude;
+        lon1 = Ssim(fromSub).Longitude;
 
-        E2 = Ssim(toSub).Easting;
-        N2 = Ssim(toSub).Northing;
+        lat2 = Ssim(toSub).Latitude;
+        lon2 = Ssim(toSub).Longitude;
 
         % -------------------------------------------------
-        % Length (km)
+        % Compute Distance From Lat/Lon
+        % Great-circle distance
         % -------------------------------------------------
-        len = sqrt( ...
-            (E2-E1).^2 + ...
-            (N2-N1).^2 ) / 1000;
+        
+        d = distance( ...
+            lat1, lon1,...
+            lat2, lon2);
 
+        len = deg2km(d);
+
+        % -------------------------------------------------
+        % Update Length
+        % -------------------------------------------------
         Lsim(k).Length = len;
 
         % -------------------------------------------------
-        % Geographic Coordinates
+        % Update Location
         % -------------------------------------------------
         Lsim(k).Loc = [ ...
-            Ssim(fromSub).Latitude ...
-            Ssim(fromSub).Longitude;
-            Ssim(toSub).Latitude ...
-            Ssim(toSub).Longitude ];
+            lat1 lon1;
+            lat2 lon2 ];
 
         % -------------------------------------------------
-        % Recalculate Resistance
+        % Update Resistance
         % -------------------------------------------------
-        if ~isnan(Lsim(k).ResKm)
-
-            Lsim(k).Resistance = ...
-                Lsim(k).ResKm * len;
-        else
-            Lsim(k).Resistance = NaN;
-        end
+        Lsim(k).Resistance = Lsim(k).ResKm * len;
 
     end
 
@@ -119,22 +114,20 @@ function [Ssim,Lsim,Tsim,latq,lonq] = ...
     [X,Y] = meshgrid(x,y);
 
     % -----------------------------------------------------
-    % Convert Grid To Projected Coordinates
+    % Sandbox -> UTM
     % -----------------------------------------------------
     easting = ...
-        app.SandboxOriginEasting + ...
-        X(:) * app.SandboxScaleKm * 1000;
+        500000+ (X(:) * app.SandboxScaleKm * 1000);
 
     northing = ...
-        app.SandboxOriginNorthing + ...
         Y(:) * app.SandboxScaleKm * 1000;
 
     % -----------------------------------------------------
-    % Convert Grid To Lat/Lon
+    % UTM -> Lat/Lon
     % -----------------------------------------------------
-    [latq,lonq] = projinv( ...
-        app.SandboxProj,...
-        easting,...
-        northing);
+    [lonq,latq] = utm2geo(easting, northing, app.SandboxCentralLongitude, app.SandboxOriginLatitude);
+    lonq = reshape(lonq, nGrid, nGrid);
+    latq = reshape(latq, nGrid, nGrid);
+
 
 end

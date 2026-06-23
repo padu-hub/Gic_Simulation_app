@@ -9,7 +9,7 @@ function initializeSandboxData(app)
     % =====================================================
     % Default Substation Coordinates
     % =====================================================
-    xy = [
+xy = [
         -10   0 ;   % S1
          10   0 ;   % S2
          30  25 ;   % S3
@@ -45,41 +45,60 @@ function initializeSandboxData(app)
         1 5
         1 6
         ];
-
+    
+    lineBusPairs = [
+        2 3      % L1
+        4 5      % L2
+        4 7      % L3
+        1 9      % L4
+        1 11     % L5
+        ];
+    
     for k = 1:5
-
+    
         fromSub = linePairs(k,1);
-        toSub = linePairs(k,2);
-
+        toSub   = linePairs(k,2);
+    
         p1 = xy(fromSub,:);
         p2 = xy(toSub,:);
-
+    
         len = norm(p2-p1);
-
-        app.SandboxL(k).Name = sprintf('Line%d',k);
-
+    
+        app.SandboxL(k).Name = ...
+            sprintf('Line%d',k);
+    
         app.SandboxL(k).Voltage = 500;
-
-        app.SandboxL(k).fromSub = sprintf('Sub%d', fromSub);
-        app.SandboxL(k).toSub = sprintf('Sub%d', toSub);
-
+    
+        app.SandboxL(k).fromSub = ...
+            sprintf('Sub%d',fromSub);
+    
+        app.SandboxL(k).toSub = ...
+            sprintf('Sub%d',toSub);
+    
         app.SandboxL(k).Loc = [
             p1(2) p1(1)
             p2(2) p2(1)
             ];
-
+    
         app.SandboxL(k).ResKm = 1;
-
-        app.SandboxL(k).fromBus = 2*fromSub;
-        app.SandboxL(k).toBus = 2*toSub-1;
-
+    
+        % -----------------------------------------
+        % Explicit Bus Assignments
+        % -----------------------------------------
+        app.SandboxL(k).fromBus = ...
+            lineBusPairs(k,1);
+    
+        app.SandboxL(k).toBus = ...
+            lineBusPairs(k,2);
+    
         app.SandboxL(k).Length = len;
-
+    
         app.SandboxL(k).Resistance = ...
-        app.SandboxL(k).ResKm * len;
-        app.OriginalSandboxL= app.SandboxL;
-
+            app.SandboxL(k).ResKm * len;
+    
     end
+    
+    app.OriginalSandboxL = app.SandboxL;
 
     % =====================================================
     % Build T Structure
