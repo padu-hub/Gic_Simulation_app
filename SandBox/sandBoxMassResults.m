@@ -446,9 +446,10 @@ function plotSandboxMassResults(Results,GIC_base,theta)
     if nRows*nCols < nRelevant
         nRows = nRows + 1;
     end
-%     =====================================================
 %     Plot Heatmaps
-%     =====================================================
+%   =====================================================
+%   Plot Heatmaps
+%   =====================================================
     figure( ...
         'Color','w',...
         'Name','Substation GIC Change Heatmaps');

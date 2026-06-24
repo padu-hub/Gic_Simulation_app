@@ -1,0 +1,188 @@
+
+function plotSandboxLengthResistanceStudy(app)
+S0 = app.SandboxS;
+L0 = app.SandboxL;
+T0 = app.SandboxT;
+
+% =====================================================
+% Sweep Values
+% =====================================================
+dVals = linspace(0,100,20);
+
+rVals = linspace(0.01,0.5,20);
+
+nSubs = length(S0);
+
+DeltaPeak = ...
+    zeros(length(dVals),...
+          length(rVals),...
+          nSubs);
+app.sandBoxMode = 1;
+app.theta = 0:app.SandboxAngleStep:app.SandboxAngle;
+
+
+% =====================================================
+% Parameter Sweep
+% =====================================================
+for i = 1:length(dVals)
+
+    d = dVals(i);
+
+    for j = 1:length(rVals)
+
+        r = rVals(j);
+
+        S = S0;
+        L = L0;
+        T = T0;
+
+        % ---------------------------------------------
+        % Stretch Corridor
+        % -----------------------------------
+        % 
+        for k = [1 5 6]
+
+            S(k).Longitude = ...
+                S0(k).Longitude - d;
+        
+        end
+        
+        for k = [2 3 4]
+        
+            S(k).Longitude = ...
+                S0(k).Longitude + d;
+        
+        end
+
+        % ---------------------------------------------
+        % Change Corridor Resistance
+        % ---------------------------------------------
+        L(1).ResKm = r;
+        L(2).ResKm = r;
+
+        % ---------------------------------------------
+        % Rebuild Lengths
+        % ---------------------------------------------
+        for k = 1:length(L)
+
+            fromSub = sscanf( ...
+                L(k).fromSub,...
+                '%*[^0-9]%d');
+
+            toSub = sscanf( ...
+                L(k).toSub,...
+                '%*[^0-9]%d');
+
+            p1 = [ ...
+                S(fromSub).Longitude
+                S(fromSub).Latitude];
+
+            p2 = [ ...
+                S(toSub).Longitude
+                S(toSub).Latitude];
+
+            len = norm(p2-p1);
+
+            L(k).Length = len;
+
+            L(k).Resistance = ...
+                L(k).ResKm * len;
+
+        end
+
+        % =============================================
+        % Connected Case
+        % =============================================
+        [Ssim,Lsim,Tsim,latq,lonq] = ...
+            buildSandboxSimulationNetwork( ...
+            app,S,L,T);
+
+        [~,~,~,GIC_conn,~,~,~,~] = ...
+            calc_gic_main( ...
+            app,...
+            Ssim,...
+            Lsim,...
+            Tsim,...
+            app.EfieldValueEditField.Value,...
+            [],...
+            latq,...
+            lonq,...
+            [],...
+            Lsim,...
+            Tsim);
+
+        % =============================================
+        % Disconnected Case
+        % =============================================
+        Ldisc = L;
+
+        Ldisc(2).ResKm = NaN;
+
+        [Ssim,Lsim,Tsim,latq,lonq] = ...
+            buildSandboxSimulationNetwork( ...
+            app,S,Ldisc,T);
+
+        [~,~,~,GIC_disc,~,~,~,~] = ...
+            calc_gic_main( ...
+            app,...
+            Ssim,...
+            Lsim,...
+            Tsim,...
+            app.EfieldValueEditField.Value,...
+            [],...
+            latq,...
+            lonq,...
+            [],...
+            Lsim,...
+            Tsim);
+
+        % =============================================
+        % Peak Difference
+        % =============================================
+        cur = abs(GIC_disc.Subs);
+
+        base = abs(GIC_conn.Subs);
+
+        for s = 1:nSubs
+
+            DeltaPeak(i,j,s) = ...
+                max(cur(s,:)) - ...
+                max(base(s,:));
+
+        end
+
+    end
+
+end
+
+% =====================================================
+% Plot
+% =====================================================
+[R,D] = meshgrid(rVals,dVals);
+
+figure('Color','w')
+
+for s = 1:nSubs
+
+    subplot(2,ceil(nSubs/2),s)
+
+    surf(R,D,DeltaPeak(:,:,s))
+
+    shading interp
+
+    xlabel('ResKm')
+
+    ylabel('Stretch')
+
+    zlabel('\Delta Peak GIC (A)')
+
+    title(sprintf('Sub %d',s))
+
+    colorbar
+
+    view(135,30)
+end
+
+sgtitle('Peak GIC Change (Disconnected - Connected)')
+
+end
