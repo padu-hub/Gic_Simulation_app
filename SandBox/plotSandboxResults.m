@@ -133,34 +133,36 @@ function plotSandboxResults( ...
     title(ax,'Induced current vs E-Field Orientation')
     legend(ax,'show')
 
-    
+
+
+
+
+
+
+
+% --- Main plotting script (assumes combineLegend.m is on path) ---
 % Create a separate MATLAB figure with three stacked axes (shared x-axis)
 fig = figure('Name','Sandbox Results (Stacked)', 'NumberTitle','off');
 
-% Base normalized positions within figure for three stacked axes
-pad = 0.04; % vertical padding between plots (normalized)
+% Layout
+pad = 0.04;
 bot = 0.08;
 top = 0.92;
 heightTotal = top - bot;
 hEach = (heightTotal - 2*pad) / 3;
 
-% Positions from top to bottom: Induced (top), Line GIC (middle), Substation GIC (bottom)
-posInd = [0.12, bot + 2*(hEach+pad), 0.78, hEach];
+posInd  = [0.12, bot + 2*(hEach+pad), 0.78, hEach];
 posLine = [0.12, bot + (hEach+pad), 0.78, hEach];
 posSub  = [0.12, bot, 0.78, hEach];
 
 axInd = axes('Parent', fig, 'Position', posInd, 'Box', 'on');
 axLine = axes('Parent', fig, 'Position', posLine, 'Box', 'on');
-axSub = axes('Parent', fig, 'Position', posSub, 'Box', 'on');
+axSub  = axes('Parent', fig, 'Position', posSub, 'Box', 'on');
 
-% Link x-axes so they share the same x range and zoom/pan together
 linkaxes([axInd, axLine, axSub], 'x');
-
-% Hide x-tick labels for top and middle axes
 axInd.XTickLabel = [];
 axLine.XTickLabel = [];
 
-% Labels and titles
 ylabel(axInd, 'Induced Current (A)');
 title(axInd, 'Induced current vs E-Field Orientation');
 ylabel(axLine, 'GIC (A)');
@@ -171,40 +173,89 @@ title(axSub, 'Substation GIC vs E-Field Orientation');
 
 grid(axInd,'on'); grid(axLine,'on'); grid(axSub,'on');
 
-% Use color order from a new axes for consistency
 co = axInd.ColorOrder;
 nC = size(co,1);
 
-% Plot Induced currents (top) - show new vs old
+% -------------------------
+% Induced currents (top)
+% -------------------------
 hold(axInd,'on')
-nEMFcols = size(I_indResults,2);
-for k = 1:nEMFcols
-    if ~isnan(app.SandboxL(k).Resistance)
-        col = co(mod(k-1,nC)+1,:);
-        if showPrev
-            plot(axInd, theta, I_indResultsOld(:,k), 'LineWidth',1.2, 'LineStyle',':', 'Color',col, 'HandleVisibility','off');
-        end
-        plot(axInd, theta, I_indResults(:,k), 'LineWidth',1.5, 'LineStyle','-', 'Color',col, 'DisplayName', app.SandboxL(k).Name);
+nIndNew = size(I_indResults,2);
+nIndOldAvailable = size(I_indResultsOld,2);
+
+for k = 1:nIndNew
+    % skip if the corresponding sandbox entry indicates not present
+    if k <= numel(app.SandboxL) && isnan(app.SandboxL(k).Resistance)
+        continue
     end
+    col = co(mod(k-1,nC)+1,:);
+    % skip if new series is all zeros
+    if all(I_indResults(:,k) == 0)
+        continue
+    end
+
+    % plot old if requested and present
+    if showPrev && k <= nIndOldAvailable
+        if ~all(I_indResultsOld(:,k) == 0)
+            % special-case: old index 2 plotted dotted black when old had 6 and new 5
+            if k == 2 && nIndNew == 5 && nIndOldAvailable == 6
+                plot(axInd, theta, I_indResultsOld(:,k), 'LineWidth',2, 'LineStyle','--', 'Color',[0 0 0], 'HandleVisibility','off');
+            else
+                plot(axInd, theta, I_indResultsOld(:,k), 'LineWidth',2, 'LineStyle','--', 'Color',col, 'HandleVisibility','off');
+            end
+        end
+    end
+        % plot new
+    plot(axInd, theta, I_indResults(:,k), 'LineWidth',1.2, 'LineStyle','-', 'Color',col, 'DisplayName', app.SandboxL(k).Name);
 end
+
 hold(axInd,'off')
+% combine duplicates and ensure Line 1_ii is labelled if present
 legend(axInd,'show','Location','bestoutside')
 
-% Plot Line GICs (middle) - show new vs old
+% -------------------------
+% Line GICs (middle)
+% -------------------------
 hold(axLine,'on')
-nLines = size(GICLinesResults,1);
-for k = 1:nLines
-    if ~isnan(app.SandboxL(k).Resistance)||k ~= 2
-        col = co(mod(k-1,nC)+1,:);
-        if showPrev
-            plot(axLine, theta, GICLinesResultsOld(k,:), 'LineWidth',1.2, 'LineStyle',':', 'Color',col, 'HandleVisibility','off');
-        end
-        plot(axLine, theta, GICLinesResults(k,:), 'LineWidth',1.5, 'LineStyle','-', 'Color',col, 'DisplayName', app.SandboxL(k).Name);
+nLinesAvailable = size(GICLinesResults,1);
+nLinesOldAvailable = size(GICLinesResultsOld,1);
+
+for k = 1:min(nLinesAvailable)
+    % skip if sandbox indicates disconnected
+    if k <= numel(app.SandboxL) && isnan(app.SandboxL(k).Resistance)
+        continue
     end
+    % skip if new series is all zeros
+    if all(GICLinesResults(k,:) == 0)
+        continue
+    end
+    col = co(mod(k-1,nC)+1,:);
+   
+    % plot old if available
+    if showPrev
+        if k <= nLinesOldAvailable && ~all(GICLinesResultsOld(k,:) == 0)
+            if k == 2 && nLinesAvailable == 5 && nLinesOldAvailable == 6
+                plot(axLine, theta, GICLinesResultsOld(k,:), 'LineWidth',2, 'LineStyle','--', 'Color',[0 0 0], 'HandleVisibility','off');
+            else
+                plot(axLine, theta, GICLinesResultsOld(k,:), 'LineWidth',2, 'LineStyle','--', 'Color',col, 'HandleVisibility','off');
+            end
+        end
+    end
+
+    % plot new
+    plot(axLine, theta, GICLinesResults(k,:), 'LineWidth',1.2, 'LineStyle','-', 'Color',col, 'DisplayName', app.SandboxL(k).Name);
+
+
 end
+
 hold(axLine,'off')
+% combine duplicates and ensure Line 1_ii is labelled if present
 legend(axLine,'show','Location','bestoutside')
 
+% -------------------------
+% Substation GICs (bottom)
+% -------------------------
+hold(axSub,'on')
 % Plot Substation GICs (bottom) - show new vs old
 hold(axSub,'on')
 %nSubsPlot = size(GICSubsResults,1);
@@ -224,18 +275,25 @@ for k = 1:2
     if ~doPlot, continue, end
     col = co(mod(k-1,nC)+1,:);
     if showPrev
-        plot(axSub, theta, GICSubsResultsOld(k,:), 'LineWidth',1.2, 'LineStyle',':', 'Color',col, 'HandleVisibility','off');
+        plot(axSub, theta, GICSubsResultsOld(k,:), 'LineWidth',2, 'LineStyle','--', 'Color',col, 'HandleVisibility','off');
     end
-    plot(axSub, theta, GICSubsResults(k,:), 'LineWidth',1.5, 'LineStyle','-', 'Color',col, 'DisplayName', app.SandboxS(k).Name);
+
+    plot(axSub, theta, GICSubsResults(k,:), 'LineWidth',1.2, 'LineStyle','-', 'Color',col, 'DisplayName', app.SandboxS(k).Name);
 end
 hold(axSub,'off')
 legend(axSub,'show','Location','bestoutside')
 
-% Ensure x-limits match theta range across all axes
+% Match x-limits
 if ~isempty(theta)
     xlimVal = [min(theta(:)), max(theta(:))];
     xlim(axSub, xlimVal)
     xlim(axLine, xlimVal)
     xlim(axInd, xlimVal)
 end
+
+
 end
+
+
+
+
