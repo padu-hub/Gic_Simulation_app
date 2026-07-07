@@ -134,163 +134,100 @@ function plotSandboxResults( ...
     legend(ax,'show')
 
 
+    
 
 
 
+%% ============================================================
+% Heatmaps of GIC Difference (New - Old)
+% Rows    : Lines/Substations/Induced Currents
+% Columns : E-field angle
+% Values  : New GIC - Previous GIC
+%% ============================================================
 
+fig = figure('Name','GIC Difference Heatmaps','NumberTitle','off');
+t = tiledlayout(3,1,'TileSpacing','compact','Padding','compact');
 
+%% ------------------------------------------------------------
+% 1. Induced Current Heatmap
+%% ------------------------------------------------------------
 
-% --- Main plotting script (assumes combineLegend.m is on path) ---
-% Create a separate MATLAB figure with three stacked axes (shared x-axis)
-fig = figure('Name','Sandbox Results (Stacked)', 'NumberTitle','off');
+nexttile
 
-% Layout
-pad = 0.04;
-bot = 0.08;
-top = 0.92;
-heightTotal = top - bot;
-hEach = (heightTotal - 2*pad) / 3;
+dInd = I_indResults' - I_indResultsOld';
 
-posInd  = [0.12, bot + 2*(hEach+pad), 0.78, hEach];
-posLine = [0.12, bot + (hEach+pad), 0.78, hEach];
-posSub  = [0.12, bot, 0.78, hEach];
+% Keep only rows that contain non-zero data
+keep = any(abs(dInd)>0,2);
+dInd = dInd(keep,:);
 
-axInd = axes('Parent', fig, 'Position', posInd, 'Box', 'on');
-axLine = axes('Parent', fig, 'Position', posLine, 'Box', 'on');
-axSub  = axes('Parent', fig, 'Position', posSub, 'Box', 'on');
+indNames = {app.SandboxL(keep).Name};
 
-linkaxes([axInd, axLine, axSub], 'x');
-axInd.XTickLabel = [];
-axLine.XTickLabel = [];
+imagesc(theta,1:size(dInd,1),dInd)
 
-ylabel(axInd, 'Induced Current (A)');
-title(axInd, 'Induced current vs E-Field Orientation');
-ylabel(axLine, 'GIC (A)');
-title(axLine, 'Line GIC vs E-Field Orientation');
-xlabel(axSub, 'E-Field Orientation (deg)');
-ylabel(axSub, 'GIC (A)');
-title(axSub, 'Substation GIC vs E-Field Orientation');
+set(gca,'YDir','normal')
+yticks(1:length(indNames))
+yticklabels(indNames)
 
-grid(axInd,'on'); grid(axLine,'on'); grid(axSub,'on');
+xlabel('E-Field Angle (deg)')
+ylabel('Lines')
+title('Induced Current Difference (New - Old)')
 
-co = axInd.ColorOrder;
-nC = size(co,1);
+colorbar
+colormap(redblue(30))
 
-% -------------------------
-% Induced currents (top)
-% -------------------------
-hold(axInd,'on')
-nIndNew = size(I_indResults,2);
-nIndOldAvailable = size(I_indResultsOld,2);
+%% ------------------------------------------------------------
+% 2. Line GIC Heatmap
+%% ------------------------------------------------------------
 
-for k = 1:nIndNew
-    % skip if the corresponding sandbox entry indicates not present
-    if k <= numel(app.SandboxL) && isnan(app.SandboxL(k).Resistance)
-        continue
-    end
-    col = co(mod(k-1,nC)+1,:);
-    % skip if new series is all zeros
-    if all(I_indResults(:,k) == 0)
-        continue
-    end
+nexttile
 
-    % plot old if requested and present
-    if showPrev && k <= nIndOldAvailable
-        if ~all(I_indResultsOld(:,k) == 0)
-            % special-case: old index 2 plotted dotted black when old had 6 and new 5
-            if k == 2 && nIndNew == 5 && nIndOldAvailable == 6
-                plot(axInd, theta, I_indResultsOld(:,k), 'LineWidth',2, 'LineStyle','--', 'Color',[0 0 0], 'HandleVisibility','off');
-            else
-                plot(axInd, theta, I_indResultsOld(:,k), 'LineWidth',2, 'LineStyle','--', 'Color',col, 'HandleVisibility','off');
-            end
-        end
-    end
-        % plot new
-    plot(axInd, theta, I_indResults(:,k), 'LineWidth',1.2, 'LineStyle','-', 'Color',col, 'DisplayName', app.SandboxL(k).Name);
-end
+dLine = GICLinesResults - GICLinesResultsOld;
 
-hold(axInd,'off')
-% combine duplicates and ensure Line 1_ii is labelled if present
-legend(axInd,'show','Location','bestoutside')
+keep = any(abs(dLine)>0,2);
+dLine = dLine(keep,:);
 
-% -------------------------
-% Line GICs (middle)
-% -------------------------
-hold(axLine,'on')
-nLinesAvailable = size(GICLinesResults,1);
-nLinesOldAvailable = size(GICLinesResultsOld,1);
+lineNames = {app.SandboxL(keep).Name};
 
-for k = 1:min(nLinesAvailable)
-    % skip if sandbox indicates disconnected
-    if k <= numel(app.SandboxL) && isnan(app.SandboxL(k).Resistance)
-        continue
-    end
-    % skip if new series is all zeros
-    if all(GICLinesResults(k,:) == 0)
-        continue
-    end
-    col = co(mod(k-1,nC)+1,:);
-   
-    % plot old if available
-    if showPrev
-        if k <= nLinesOldAvailable && ~all(GICLinesResultsOld(k,:) == 0)
-            if k == 2 && nLinesAvailable == 5 && nLinesOldAvailable == 6
-                plot(axLine, theta, GICLinesResultsOld(k,:), 'LineWidth',2, 'LineStyle','--', 'Color',[0 0 0], 'HandleVisibility','off');
-            else
-                plot(axLine, theta, GICLinesResultsOld(k,:), 'LineWidth',2, 'LineStyle','--', 'Color',col, 'HandleVisibility','off');
-            end
-        end
-    end
+imagesc(theta,1:size(dLine,1),dLine)
 
-    % plot new
-    plot(axLine, theta, GICLinesResults(k,:), 'LineWidth',1.2, 'LineStyle','-', 'Color',col, 'DisplayName', app.SandboxL(k).Name);
+set(gca,'YDir','normal')
+yticks(1:length(lineNames))
+yticklabels(lineNames)
 
+xlabel('E-Field Angle (deg)')
+ylabel('Lines')
+title('Line GIC Difference (New - Old)')
 
-end
+colorbar
+colormap(redblue(30))
 
-hold(axLine,'off')
-% combine duplicates and ensure Line 1_ii is labelled if present
-legend(axLine,'show','Location','bestoutside')
+%% ------------------------------------------------------------
+% 3. Substation GIC Heatmap
+%% ------------------------------------------------------------
 
-% -------------------------
-% Substation GICs (bottom)
-% -------------------------
-hold(axSub,'on')
-% Plot Substation GICs (bottom) - show new vs old
-hold(axSub,'on')
-%nSubsPlot = size(GICSubsResults,1);
-nSandbox = numel(app.SandboxL);
-for k = 1:2
-    % follow same plotting decision logic as original
-    if k <= 2
-        doPlot = true;
-    else
-        prev = k - 1;
-        if prev <= nSandbox && isnan(app.SandboxL(prev).Resistance)
-            doPlot = false;
-        else
-            doPlot = true;
-        end
-    end
-    if ~doPlot, continue, end
-    col = co(mod(k-1,nC)+1,:);
-    if showPrev
-        plot(axSub, theta, GICSubsResultsOld(k,:), 'LineWidth',2, 'LineStyle','--', 'Color',col, 'HandleVisibility','off');
-    end
+nexttile
 
-    plot(axSub, theta, GICSubsResults(k,:), 'LineWidth',1.2, 'LineStyle','-', 'Color',col, 'DisplayName', app.SandboxS(k).Name);
-end
-hold(axSub,'off')
-legend(axSub,'show','Location','bestoutside')
+dSub = GICSubsResults - GICSubsResultsOld;
 
-% Match x-limits
-if ~isempty(theta)
-    xlimVal = [min(theta(:)), max(theta(:))];
-    xlim(axSub, xlimVal)
-    xlim(axLine, xlimVal)
-    xlim(axInd, xlimVal)
-end
+% Only show substations that ever have non-zero GIC
+keep = any(abs(GICSubsResults)>0,2);
 
+dSub = dSub(keep,:);
+
+subNames = {app.SandboxS(keep).Name};
+
+imagesc(theta,1:size(dSub,1),dSub)
+
+set(gca,'YDir','normal')
+yticks(1:length(subNames))
+yticklabels(subNames)
+
+xlabel('E-Field Angle (deg)')
+ylabel('Substations')
+title('Substation GIC Difference (New - Old)')
+
+colorbar
+colormap(redblue(30))
 
 end
 

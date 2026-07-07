@@ -23,13 +23,13 @@ nL = numel(app.L);
 lineIdxAll = (1:nL).';
 
 % --- 1) Length score (use L.Length) ---
-len= nan(nL,1);
+lenScore= zeros(nL,1);
 for i=1:nL
     if isfield(app.L(i),'Length') && ~isempty(app.L(i).Length)    
-        len(i) = app.L(i).Length;
+        lenScore(i) = app.L(i).Length;
     end
 end
-lenScore = normalize0to100(len);
+lenScore = normalize0to20(lenScore);
 
 
 % --- 2) GIC score from results.rank.line(:,2) ---
@@ -85,7 +85,7 @@ for i = 1:nL
         rvals(isnan(rvals)) = -Inf;
         [~, maxPos] = max(rvals);
         maxIdx = group(maxPos);
-        locScore(group) = 50;
+        locScore(group) = 20;
         locScore(maxIdx) = 0;
     end
     assigned(group) = true;
@@ -191,5 +191,29 @@ function out = normalize0to100(v)
         return;
     end
     out(valid) = (vValid - vmin) ./ (vmax - vmin) * 100;
+    out(~valid) = 0;
+end
+
+function out = normalize0to20(v)
+    out = zeros(size(v));
+    if all(isnan(v) | v==0)
+        out(:) = 0;
+        return;
+    end
+    % replace NaN with -Inf so they become min if needed, but keep zeros handled
+    valid = ~isnan(v);
+    if ~any(valid)
+        out(:) = 0; return;
+    end
+    vValid = v(valid);
+    vmin = min(vValid);
+    vmax = max(vValid);
+    if vmin == vmax
+        % all same -> assign 100 to all valid entries
+        out(valid) = 20;
+        out(~valid) = 0;
+        return;
+    end
+    out(valid) = (vValid - vmin) ./ (vmax - vmin) * 20;
     out(~valid) = 0;
 end

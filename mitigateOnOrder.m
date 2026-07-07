@@ -10,13 +10,7 @@ if nargin < 2
     error('Requires app and idx_sorted');
 end
 idx_sorted = idx_sorted(:);
-
-% Ensure masks exist or create defaults
-if isprop(app, 'lineOpen')
-    lineOpen = app.lineOpen;
-else
-    lineOpen = false(1, max(idx_sorted));
-end
+lineOpen       = false(numel(idx_sorted), 1);
 
 % Baseline simulation
 app.gic_originalS=[]; app.gic_originalL=[]; app.gic_originalT=[];
@@ -51,39 +45,25 @@ catch
 end
 
 % Main loop: stop if all processed OR last max transformer < 5 A
-nCand = numel(idx_sorted);
-for k = 1:nCand
-    if maxTrans(end) < 10 || sumSubs(end) < 50
-        try
-            app.StatusTextArea.Value = [app.StatusTextArea.Value; "Stopping: max transformer GIC < 5 A"];
-            app.StatusTextArea.scroll('bottom');
-            drawnow limitrate;
-        catch
-        end
-        break;
+% nCand = numel(idx_sorted);
+for k = 1:30
+    % if maxTrans(end) < 10 || sumSubs(end) < 50
+    %     try
+    %         app.StatusTextArea.Value = [app.StatusTextArea.Value; "Stopping: max transformer GIC < 5 A"];
+    %         app.StatusTextArea.scroll('bottom');
+    %         drawnow limitrate;
+    %     catch
+    %     end
+    %     break;
+    % end
+    if k == 28
+        x=1;
     end
-
     lineIdx = idx_sorted(k);
 
     % apply mitigation (no winding/blocking arguments)
-    try
-        [app, lineOpen,~, description] = ...
+    [app, lineOpen,~, description] = ...
             applyMitigationToNetwork(app, 'line', lineIdx, lineOpen,0);
-    catch ME
-        try
-            msg = sprintf('Error applying mitigation to line %d: %s', lineIdx, ME.message);
-            app.StatusTextArea.Value = [app.StatusTextArea.Value; msg];
-            app.StatusTextArea.scroll('bottom');
-            drawnow limitrate;
-        catch
-        end
-        break;
-    end
-    
-    % mark line open locally if in bounds
-    if lineIdx <= numel(lineOpen)
-        lineOpen(lineIdx) = true;
-    end
 
     % re-run sim and extract metrics
     [~, ~, ~, GIC_current] = runGIC_now(app);
@@ -98,14 +78,12 @@ for k = 1:nCand
     maxLineName{end+1}  = maxLNameN;
 
     % UI log per step
-    try
-        stepMsg = sprintf('Applied: %s | TotalSubSum=%.2f | MaxTrans=%.2f [%s] | MaxLine=%.2f [%s]', ...
-            char(description), sumN, maxTN, char(maxTNameN), maxLN, char(maxLNameN));
-        app.StatusTextArea.Value = [app.StatusTextArea.Value; string(description); stepMsg];
-        app.StatusTextArea.scroll('bottom');
-        drawnow limitrate;
-    catch
-    end
+    stepMsg = sprintf('Applied: %s | TotalSubSum=%.2f | MaxTrans=%.2f [%s] | MaxLine=%.2f [%s]', ...
+        char(description), sumN, maxTN, char(maxTNameN), maxLN, char(maxLNameN));
+    app.StatusTextArea.Value = [app.StatusTextArea.Value; string(description); stepMsg];
+    app.StatusTextArea.scroll('bottom');
+    drawnow limitrate;
+
 
 end
 
@@ -131,6 +109,8 @@ try
 catch
 end
 plotGICMitigationResults(results)
+app.L = app.OriginalL;
+app.T = app.OriginalT;
 end
 
 %% Helper: simplified metrics extractor (no winding detail)
