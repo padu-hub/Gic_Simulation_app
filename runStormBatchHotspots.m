@@ -120,9 +120,9 @@ save(outName, 'results', '-v7.3');
 
 % Plot boxplots for top-20 by rank
 Nplot = 20;
-plot_top_box(results.rank.line,  Nplot, lineSamples,  lineNames,  'Top-20 Lines (15-min samples)');
-plot_top_box(results.rank.sub,   Nplot, subSamples,   subNames,   'Top-20 Substations (15-min samples)');
-plot_top_box(results.rank.trans, Nplot, transSamples, transNames, 'Top-20 Transformers (15-min samples)');
+plot_top_box(results.rank.line,  Nplot, lineSamples,  lineNames,  'Top-20 Lines (15-min samples) from top stormes');
+plot_top_box(results.rank.sub,   Nplot, subSamples,   subNames,   'Top-20 Substations (15-min samples) from top storms');
+plot_top_box(results.rank.trans, Nplot, transSamples, transNames, 'Top-20 Transformers (15-min samples) from top storms');
 
 end
 
@@ -169,43 +169,62 @@ function T = build_rank_table(cellSamples, names)
         'VariableNames', {'Name','Sum','Nsamples','Rank'});
 end
 
-%% Helper: plot top-k boxplot given rank table and samples
+%% Helper: plot top-k (violin) given rank table and samples
 function plot_top_box(rankTable, K, samplesCell, names, figTitle)
-    if isempty(rankTable), return; end
-    valid = ~isnan(rankTable.Sum);
-    ranked = sortrows(rankTable(valid,:), 'Rank', 'ascend');
-    K = min(K, height(ranked));
-    if K == 0, return; end
-    topNames = ranked.Name(1:K);
-    idx = arrayfun(@(s) find(names==s,1), topNames);
-    % build matrix or cell for boxplot: each column is a site
-    data = cell(K,1);
-    for k = 1:K
-        i = idx(k);
-        data{k} = samplesCell{i}(:);
-    end
-    figure('Name', figTitle);
-    boxplot_grouped_from_cells(data, cellstr(topNames));
-    title(figTitle);
-    ylabel('15-min mean |GIC|');
-    xtickangle(45); grid on;
-end
 
-%% Helper: boxplot from cell array of vectors (one column per group)
-function boxplot_grouped_from_cells(dataCell, labels)
-    % Convert to vector + group index for MATLAB boxplot
-    allVals = [];
-    grp = [];
-    for i = 1:numel(dataCell)
-        v = dataCell{i}(:);
-        allVals = [allVals; v];
-        grp = [grp; repmat(i, numel(v), 1)];
-    end
-    if isempty(allVals)
-        warning('No samples to plot.');
+    if isempty(rankTable)
         return;
     end
-    boxplot(allVals, grp, 'Labels', labels);
+
+    valid = ~isnan(rankTable.Sum);
+    ranked = sortrows(rankTable(valid,:), 'Rank', 'ascend');
+
+    K = min(K,height(ranked));
+    if K == 0
+        return;
+    end
+
+    topNames = ranked.Name(1:K);
+    idx = arrayfun(@(s)find(names==s,1),topNames);
+
+    % Build long-form data and group labels
+    Y = [];
+    G = categorical();
+
+    for k = 1:K
+        vals = samplesCell{idx(k)}(:);
+
+        Y = [Y; vals];
+
+        G = [G;
+             categorical( ...
+                 repmat(string(topNames(k)),length(vals),1), ...
+                 string(topNames), ...
+                 string(topNames))];
+    end
+
+    figure('Name',figTitle);
+
+    vp = violinplot(G,Y,...
+        DensityWidth=0.8,...
+        DensityScale="width");
+
+    % Make all violins the same color
+    blue = [0 0.4470 0.7410];
+
+    for k = 1:numel(vp)
+        vp(k).FaceColor = blue;
+    end
+
+    title(figTitle)
+    ylabel('15-min mean |GIC|')
+
+    % Optional for GIC data
+    % set(gca,'YScale','log')
+
+    xtickangle(45)
+    grid on
+
 end
 
 %% Helper: window length in samples from datetime vector
