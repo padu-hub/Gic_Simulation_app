@@ -1,0 +1,137 @@
+function plotSandboxPolar(theta, ...
+    I_indResults, I_indResultsOld, ...
+    GICLinesResults, GICLinesResultsOld, ...
+    GICSubsResults, GICSubsResultsOld, ...
+    app)
+
+theta = theta(:);
+oldLineNames = {app.OldSandboxL.Name};  % cell array expected
+% Quick exit: do not show anything if any required old data or names are missing
+if isempty(I_indResultsOld) || isempty(GICLinesResultsOld) || isempty(GICSubsResultsOld) || ...
+       isempty(oldLineNames) 
+    return
+end
+
+%% Merge duplicate OLD entries
+[I_indResultsOld, indNames] = mergeDuplicateNames(I_indResultsOld, oldLineNames);
+[I_indResults,    ~]        = mergeDuplicateNames(I_indResults,    {app.SandboxL.Name});
+
+[GICLinesResultsOld, lineNames] = mergeDuplicateNames(GICLinesResultsOld, oldLineNames);
+[GICLinesResults,    ~]         = mergeDuplicateNames(GICLinesResults,    {app.SandboxL.Name});
+
+%% Calculate differences
+dInd  = I_indResults  - I_indResultsOld;
+dLine = GICLinesResults - GICLinesResultsOld;
+dSub  = GICSubsResults - GICSubsResultsOld;
+
+%% Figure
+figure( ...
+    'Color','w',...
+    'Name','Sandbox Difference',...
+    'NumberTitle','off');
+
+t = tiledlayout(3,1,...
+    'TileSpacing','compact',...
+    'Padding','compact');
+
+co = lines(7);
+
+%% ============================================================
+% Induced Current
+%% ============================================================
+
+ax1 = nexttile;
+hold(ax1,'on')
+grid(ax1,'on')
+box(ax1,'on')
+
+for k = 1:size(dInd,2)
+
+    if all(abs(dInd(:,k))<1e-10)
+        continue
+    end
+
+    plot(ax1,...
+        theta,...
+        dInd(:,k),...
+        'LineWidth',2,...
+        'Color',co(k,:),...
+        'DisplayName',indNames{k});
+
+end
+
+yline(ax1,0,'k--');
+
+title(ax1,'Induced Current Difference')
+ylabel(ax1,'\Delta Current (A)')
+legend(ax1,'Location','eastoutside')
+
+%% ============================================================
+% Line GIC
+%% ============================================================
+
+ax2 = nexttile;
+hold(ax2,'on')
+grid(ax2,'on')
+box(ax2,'on')
+
+for k = 1:size(dLine,1)
+
+    if all(abs(dLine(k,:))<1e-10)
+        continue
+    end
+
+    plot(ax2,...
+        theta,...
+        dLine(k,:),...
+        'LineWidth',2,...
+        'Color',co(k,:),...
+        'DisplayName',lineNames{k});
+
+end
+
+title(ax2,'Line GIC Difference')
+ylabel(ax2,'\Delta GIC (A)')
+legend(ax2,'Location','eastoutside')
+
+%% ============================================================
+% Substation GIC
+%% ============================================================
+
+ax3 = nexttile;
+hold(ax3,'on')
+grid(ax3,'on')
+box(ax3,'on')
+
+coSub = lines(size(dSub,1));
+
+for k = 1:2
+
+    if all(abs(dSub(k,:))<1e-10)
+        continue
+    end
+
+    plot(ax3,...
+        theta,...
+        dSub(k,:),...
+        'LineWidth',2,...
+        'Color',coSub(k,:),...
+        'DisplayName',app.SandboxS(k).Name);
+
+end
+
+title(ax3,'Substation GIC Difference')
+xlabel(ax3,'E-Field Orientation (deg)')
+ylabel(ax3,'\Delta GIC (A)')
+legend(ax3,'Location','eastoutside')
+
+%% Common formatting
+linkaxes([ax1 ax2 ax3],'x')
+
+xlim([min(theta) max(theta)])
+
+xticks(ax1,0:30:max(theta))
+xticks(ax2,0:30:max(theta))
+xticks(ax3,0:30:max(theta))
+
+end

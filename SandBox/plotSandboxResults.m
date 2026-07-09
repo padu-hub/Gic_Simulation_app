@@ -52,7 +52,8 @@ function plotSandboxResults( ...
         end
     
         col = colorOrder(mod(k-1,nColors)+1,:);
-        if showPrev
+
+        if showPrev && ~isempty(GICSubsResultsOld)
             plot(ax, theta, GICSubsResultsOld(k,:), ...
                 'LineWidth',1.5, 'LineStyle',':', ...
                 'Color', col, 'HandleVisibility','off', 'DisplayName','');
@@ -78,21 +79,24 @@ function plotSandboxResults( ...
     colorOrder = ax.ColorOrder;
     nColors = size(colorOrder,1);
     nLines = size(GICLinesResults,1);
-
     for k = 1:nLines
         if ~isnan(app.SandboxL(k).Resistance)
-            col = colorOrder(mod(k-1,nColors)+1,:);
-    
-            if showPrev 
-                plot(ax, theta, GICLinesResultsOld(k,:), ...
-                    'LineWidth',1.5, 'LineStyle',':', ...
-                    'Color', col, 'HandleVisibility','off', 'DisplayName','');
-            end
-    
+            col = colorOrder(mod(k-1,nColors)+1,:);    
             pCurr = plot(ax, theta, GICLinesResults(k,:), ...
                 'LineWidth',1.5, 'LineStyle','-', ...
                 'Color', col, 'DisplayName', app.SandboxL(k).Name);
             uistack(pCurr,'top');
+        end
+    end
+    if showPrev && ~isempty(GICLinesResultsOld)
+        nLinesOld = size(GICLinesResultsOld,1);
+        for k = 1:nLinesOld
+            if ~isnan(app.OldSandboxL(k).Resistance)
+                col = colorOrder(mod(k-1,nColors)+1,:);    
+                plot(ax, theta, GICLinesResultsOld(k,:), ...
+                    'LineWidth',1.5, 'LineStyle',':', ...
+                    'Color', col, 'HandleVisibility','off', 'DisplayName','');
+            end
         end
     end
     hold(ax,'off')
@@ -110,22 +114,28 @@ function plotSandboxResults( ...
     colorOrder = ax.ColorOrder;
     nColors = size(colorOrder,1);
     nEMFcols = size(I_indResults,2);
-    
     for k = 1:nEMFcols
         if ~isnan(app.SandboxL(k).Resistance)
-            col = colorOrder(mod(k-1,nColors)+1,:);
-            if showPrev
-            plot(ax, theta, I_indResultsOld(:,k), ...
-            'LineWidth',1.5, 'LineStyle',':', ...
-            'Color', col, 'HandleVisibility','off', 'DisplayName','');
-            end
-            
+            col = colorOrder(mod(k-1,nColors)+1,:);            
             pCurr = plot(ax, theta, I_indResults(:,k), ...
             'LineWidth',1.5, 'LineStyle','-', ...
             'Color', col, 'DisplayName', app.SandboxL(k).Name);
             uistack(pCurr,'top');
         end
     end
+
+    if showPrev && ~isempty(I_indResultsOld)
+        nEMFcolsOld = size(I_indResultsOld, 2);
+        for k = 1:nEMFcolsOld
+            if ~isnan(app.OldSandboxL(k).Resistance)
+                col = colorOrder(mod(k-1,nColors)+1,:);            
+                plot(ax, theta, I_indResultsOld(:,k), ...
+                    'LineWidth',1.5, 'LineStyle',':', ...
+                    'Color', col, 'HandleVisibility','off', 'DisplayName','');
+            end
+        end
+    end
+
     hold(ax,'off')
     grid(ax,'on')
     xlabel(ax,'E-Field Orientation (deg)')
@@ -134,101 +144,10 @@ function plotSandboxResults( ...
     legend(ax,'show')
 
 
-    
-
-
-
-%% ============================================================
-% Heatmaps of GIC Difference (New - Old)
-% Rows    : Lines/Substations/Induced Currents
-% Columns : E-field angle
-% Values  : New GIC - Previous GIC
-%% ============================================================
-
-fig = figure('Name','GIC Difference Heatmaps','NumberTitle','off');
-t = tiledlayout(3,1,'TileSpacing','compact','Padding','compact');
-
-%% ------------------------------------------------------------
-% 1. Induced Current Heatmap
-%% ------------------------------------------------------------
-
-nexttile
-
-dInd = I_indResults' - I_indResultsOld';
-
-% Keep only rows that contain non-zero data
-keep = any(abs(dInd)>0,2);
-dInd = dInd(keep,:);
-
-indNames = {app.SandboxL(keep).Name};
-
-imagesc(theta,1:size(dInd,1),dInd)
-
-set(gca,'YDir','normal')
-yticks(1:length(indNames))
-yticklabels(indNames)
-
-xlabel('E-Field Angle (deg)')
-ylabel('Lines')
-title('Induced Current Difference (New - Old)')
-
-colorbar
-colormap(redblue(30))
-
-%% ------------------------------------------------------------
-% 2. Line GIC Heatmap
-%% ------------------------------------------------------------
-
-nexttile
-
-dLine = GICLinesResults - GICLinesResultsOld;
-
-keep = any(abs(dLine)>0,2);
-dLine = dLine(keep,:);
-
-lineNames = {app.SandboxL(keep).Name};
-
-imagesc(theta,1:size(dLine,1),dLine)
-
-set(gca,'YDir','normal')
-yticks(1:length(lineNames))
-yticklabels(lineNames)
-
-xlabel('E-Field Angle (deg)')
-ylabel('Lines')
-title('Line GIC Difference (New - Old)')
-
-colorbar
-colormap(redblue(30))
-
-%% ------------------------------------------------------------
-% 3. Substation GIC Heatmap
-%% ------------------------------------------------------------
-
-nexttile
-
-dSub = GICSubsResults - GICSubsResultsOld;
-
-% Only show substations that ever have non-zero GIC
-keep = any(abs(GICSubsResults)>0,2);
-
-dSub = dSub(keep,:);
-
-subNames = {app.SandboxS(keep).Name};
-
-imagesc(theta,1:size(dSub,1),dSub)
-
-set(gca,'YDir','normal')
-yticks(1:length(subNames))
-yticklabels(subNames)
-
-xlabel('E-Field Angle (deg)')
-ylabel('Substations')
-title('Substation GIC Difference (New - Old)')
-
-colorbar
-colormap(redblue(30))
-
+    plotSandboxPolar(theta,...
+        I_indResults,I_indResultsOld,...
+        GICLinesResults,GICLinesResultsOld,...
+        GICSubsResults,GICSubsResultsOld, app)
 end
 
 

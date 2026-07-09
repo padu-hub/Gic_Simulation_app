@@ -52,7 +52,8 @@ function plotSandboxResults( ...
         end
     
         col = colorOrder(mod(k-1,nColors)+1,:);
-        if showPrev
+
+        if showPrev && ~isempty(GICSubsResultsOld)
             plot(ax, theta, GICSubsResultsOld(k,:), ...
                 'LineWidth',1.5, 'LineStyle',':', ...
                 'Color', col, 'HandleVisibility','off', 'DisplayName','');
@@ -78,21 +79,25 @@ function plotSandboxResults( ...
     colorOrder = ax.ColorOrder;
     nColors = size(colorOrder,1);
     nLines = size(GICLinesResults,1);
+    nLinesOld = siz(GICLinesResultsOld,1);
 
     for k = 1:nLines
         if ~isnan(app.SandboxL(k).Resistance)
-            col = colorOrder(mod(k-1,nColors)+1,:);
-    
-            if showPrev 
-                plot(ax, theta, GICLinesResultsOld(k,:), ...
-                    'LineWidth',1.5, 'LineStyle',':', ...
-                    'Color', col, 'HandleVisibility','off', 'DisplayName','');
-            end
-    
+            col = colorOrder(mod(k-1,nColors)+1,:);    
             pCurr = plot(ax, theta, GICLinesResults(k,:), ...
                 'LineWidth',1.5, 'LineStyle','-', ...
                 'Color', col, 'DisplayName', app.SandboxL(k).Name);
             uistack(pCurr,'top');
+        end
+    end
+    if showPrev && ~isempty(GICLinesResultsOld)
+        for k = 1:nLinesOld
+            if ~isnan(app.app.OldSandboxL(k).Resistance)
+                col = colorOrder(mod(k-1,nColors)+1,:);    
+                plot(ax, theta, GICLinesResultsOld(k,:), ...
+                    'LineWidth',1.5, 'LineStyle',':', ...
+                    'Color', col, 'HandleVisibility','off', 'DisplayName','');
+            end
         end
     end
     hold(ax,'off')
@@ -114,10 +119,9 @@ function plotSandboxResults( ...
     for k = 1:nEMFcols
         if ~isnan(app.SandboxL(k).Resistance)
             col = colorOrder(mod(k-1,nColors)+1,:);
-            if showPrev
-            plot(ax, theta, I_indResultsOld(:,k), ...
-            'LineWidth',1.5, 'LineStyle',':', ...
-            'Color', col, 'HandleVisibility','off', 'DisplayName','');
+
+            if showPrev && ~isempty(I_indResultsOld)
+  
             end
             
             pCurr = plot(ax, theta, I_indResults(:,k), ...
@@ -126,6 +130,10 @@ function plotSandboxResults( ...
             uistack(pCurr,'top');
         end
     end
+
+    
+
+
     hold(ax,'off')
     grid(ax,'on')
     xlabel(ax,'E-Field Orientation (deg)')
@@ -134,194 +142,10 @@ function plotSandboxResults( ...
     legend(ax,'show')
 
 
-    
-
-
-
-% Full script: three stacked heatmaps with one combined legend at the side
-% Assumes variables exist in workspace:
-% theta, I_indResults, I_indResultsOld, GICLinesResults, GICLinesResultsOld,
-% GICSubsResults, GICSubsResultsOld, app (with SandboxL, SandboxS), showPrev
-
-fig = figure('Name','Sandbox Results (Stacked Heatmaps)','NumberTitle','off');
-pad = 0.04; bot = 0.08; top = 0.92;
-heightTotal = top - bot; hEach = (heightTotal - 2*pad)/3;
-posInd  = [0.12, bot + 2*(hEach+pad), 0.72, hEach];   % leave extra width for legend
-posLine = [0.12, bot + (hEach+pad), 0.72, hEach];
-posSub  = [0.12, bot, 0.72, hEach];
-
-axInd = axes('Parent',fig,'Position',posInd,'Box','on');
-axLine = axes('Parent',fig,'Position',posLine,'Box','on');
-axSub = axes('Parent',fig,'Position',posSub,'Box','on');
-
-% Common x (angles)
-x = theta(:)';            % 1 x Nangles
-
-% --- 1) Induced currents heatmap (top) ---
-Inew = I_indResults;
-Iold = zeros(size(Inew));
-nOld = size(I_indResultsOld,2);
-nNew = size(Inew,2);
-minCols = min(nOld,nNew);
-if nOld>0
-    Iold(:,1:minCols) = I_indResultsOld(:,1:minCols);
-end
-Dind = Inew - Iold;      % rows = angles, cols = indices
-Dind = Dind.';           % rows = indices, cols = angles
-
-% Remove indices flagged absent by sandbox (Resistance == NaN)
-validIdx = true(size(Dind,1),1);
-for k = 1:size(Dind,1)
-    if k <= numel(app.SandboxL) && isnan(app.SandboxL(k).Resistance)
-        validIdx(k) = false;
-    end
-end
-Dind = Dind(validIdx,:);
-
-axes(axInd)
-imagesc(x, 1:max(1,size(Dind,1)), Dind); axis xy
-ylabel('Available Indices')
-title('Induced Current Difference (new - prev)')
-set(axInd,'XTickLabel',[])
-
-% --- 2) Line GICs heatmap (middle) ---
-Lnew = GICLinesResults;
-Lold = zeros(size(Lnew));
-nLinesOld = size(GICLinesResultsOld,1);
-nLinesNew = size(Lnew,1);
-if nLinesOld>0
-    minR = min(nLinesOld,nLinesNew);
-    Lold(1:minR,:) = GICLinesResultsOld(1:minR,:);
-end
-Dline = Lnew - Lold;    % rows = lines, cols = angles
-
-validLine = true(size(Dline,1),1);
-for k = 1:size(Dline,1)
-    if k <= numel(app.SandboxL) && isnan(app.SandboxL(k).Resistance)
-        validLine(k) = false;
-    end
-end
-Dline = Dline(validLine,:);
-
-axes(axLine)
-imagesc(x, 1:max(1,size(Dline,1)), Dline); axis xy
-ylabel('Available Lines')
-title('Line GIC Difference (new - prev)')
-set(axLine,'XTickLabel',[])
-
-% --- 3) Substation GICs heatmap (bottom) ---
-Snew = GICSubsResults;
-Sold = zeros(size(Snew));
-nSubsOld = size(GICSubsResultsOld,1);
-nSubsNew = size(Snew,1);
-if nSubsOld>0
-    minS = min(nSubsOld,nSubsNew);
-    Sold(1:minS,:) = GICSubsResultsOld(1:minS,:);
-end
-Dsub = Snew - Sold;     % rows = subs, cols = angles
-
-% Keep only subs with >0 GIC in new results (available subs)
-availSub = any(Snew>0,2);
-Dsub = Dsub(availSub,:);
-
-axes(axSub)
-imagesc(x, 1:max(1,size(Dsub,1)), Dsub); axis xy
-ylabel('Available Substations')
-xlabel('E-Field Orientation (deg)')
-title('Substation GIC Difference (new - prev)')
-
-% --- Shared color scaling and colormap (normal) ---
-allData = [Dind(:); Dline(:); Dsub(:)];
-if isempty(allData)
-    climVals = [-1 1];
-else
-    finiteData = allData(~isnan(allData));
-    if isempty(finiteData)
-        climVals = [-1 1];
-    else
-        maxAbs = max(abs(finiteData));
-        if maxAbs == 0, maxAbs = 1; end
-        climVals = [-maxAbs maxAbs];
-    end
-end
-
-colormap(fig, parula(256));
-set([axInd, axLine, axSub],'CLim',climVals)
-
-% Colorbar (apply to whole figure)
-cb = colorbar(axSub,'Location','eastoutside');
-cb.Label.String = 'Difference (A)';
-
-% Ticks and x labels: map angle values to x positions
-nxt = min(9,numel(x));
-xticksPos = linspace(min(x),max(x),nxt);
-set([axInd,axLine,axSub],'XTick',xticksPos)
-set(axSub,'XTickLabel', arrayfun(@(v) num2str(v), xticksPos,'UniformOutput',false))
-
-% Optional: label y ticks with names if available
-if isfield(app,'SandboxL')
-    names = {app.SandboxL.Name};
-    namesInd = names(validIdx);
-    if numel(namesInd)==size(Dind,1)
-        set(axInd,'YTick',1:numel(namesInd),'YTickLabel',namesInd);
-    end
-    namesL = {app.SandboxL.Name};
-    namesL = namesL(validLine);
-    if numel(namesL)==size(Dline,1)
-        set(axLine,'YTick',1:numel(namesL),'YTickLabel',namesL);
-    end
-end
-if isfield(app,'SandboxS')
-    sNames = {app.SandboxS.Name};
-    sNames = sNames(availSub);
-    if numel(sNames)==size(Dsub,1)
-        set(axSub,'YTick',1:numel(sNames),'YTickLabel',sNames);
-    end
-end
-
-% Match x-limits
-if ~isempty(x)
-    xlimVal = [min(x(:)), max(x(:))];
-    xlim(axSub, xlimVal)
-    xlim(axLine, xlimVal)
-    xlim(axInd, xlimVal)
-end
-
-% --- Create one combined legend at the right side for all relevant names ---
-% Build list of legend names in the original order you want:
-legendNames = {};
-% Indices / Lines from SandboxL (use all SandboxL names that were not NaN)
-if isfield(app,'SandboxL')
-    for k = 1:numel(app.SandboxL)
-        if ~isnan(app.SandboxL(k).Resistance)
-            legendNames{end+1} = app.SandboxL(k).Name; 
-    end
-end
-% Substations
-if isfield(app,'SandboxS')
-    for k = 1:numel(app.SandboxS)
-        legendNames{end+1} = app.SandboxS(k).Name;
-    end
-end
-
-% Create invisible dummy line handles (one per legend entry) with distinct colors from ColorOrder
-co = get(axInd,'ColorOrder');
-nC = size(co,1);
-nLegend = numel(legendNames);
-hLeg = gobjects(nLegend,1);
-hold(fig,'on')
-for k = 1:nLegend
-    col = co(mod(k-1,nC)+1,:);
-    hLeg(k) = plot(nan,nan,'-','Color',col,'LineWidth',1.5,'Parent',fig,'HandleVisibility','on');
-end
-hold(fig,'off')
-
-% Place legend outside on the right and make it long (adjust boxoff if desired)
-lg = legend(hLeg, legendNames,'Location','eastoutside','Interpreter','none');
-lg.Box = 'on';
-lg.AutoUpdate = 'off';  % prevent future plots from changing the legend
-
-
+    plotSandboxPolar(theta,...
+        I_indResults,I_indResultsOld,...
+        GICLinesResults,GICLinesResultsOld,...
+        GICSubsResults,GICSubsResultsOld, app)
 end
 
 
