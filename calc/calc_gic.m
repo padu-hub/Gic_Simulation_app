@@ -17,7 +17,6 @@ nNode = size(Yn,1);
 Je = zeros(nNode); %current matrix
 Vm = zeros(nNode); %voltage matrix
 for k = 1:size(edges,1)
-
     %Get total current flowing in/out of nodes
     sumcurrent = sum(-J(indices{k}),'omitnan');
     
@@ -28,7 +27,6 @@ for k = 1:size(edges,1)
     %And voltage matrix
     Vm(edges(k,1),edges(k,2)) = mean(emf(indices{k}),'omitnan');
     Vm(edges(k,2),edges(k,1)) = -mean(emf(indices{k}),'omitnan');
-
 
 end
 

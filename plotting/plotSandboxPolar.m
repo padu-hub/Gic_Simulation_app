@@ -68,7 +68,7 @@ box(ax1,'on')
 
 for k = 1:size(dInd,2)
     y = dInd(:,k);
-    if all(~any(isfinite(y))) || all(abs(y(~isnan(y))))
+    if all(~any(isfinite(y))) || all(abs(y(~isnan(y)))) || all(y(~isnan(y))==0)
         continue
     end
     h = plot(ax1, theta, y, 'LineWidth',2, 'Color',co(k,:));
@@ -93,9 +93,11 @@ box(ax2,'on')
 % Line GIC
 for k = 1:size(dLine,1)
     y = dLine(k,:);
-    if all(~any(isfinite(y))) || all(abs(y(~isnan(y))))
+    yn = y(~isnan(y));             % non-NaN elements
+    if ~any(isfinite(y)) || isempty(yn) || ~(k==1||k==3||k==5)
         continue
     end
+
     h = plot(ax2, theta, y, 'LineWidth',2, 'Color',co(k,:));
     if any(isfinite(y)) && any(abs(y(~isnan(y)))>=tol)
         set(h,'DisplayName',lineNames{k});
@@ -119,13 +121,16 @@ coSub = lines(size(dSub,1));
 
 for k = 1:size(dSub,1)
     y = dSub(k,:);
-    if all(~any(isfinite(y))) || all(abs(y(~isnan(y))))
+    yn = y(~isnan(y));             % non-NaN elements
+    if ~any(isfinite(y)) || isempty(yn) ||  ~(k==1||k==2||k==3||k==4)
         continue
     end
     h = plot(ax3, theta, y, 'LineWidth',2, 'Color',coSub(k,:));
-    if any(isfinite(y)) && any(abs(y(~isnan(y)))>=tol)
+    if any(isfinite(y)) && any(abs(y(~isnan(y)))>=tol) 
         set(h,'DisplayName',app.SandboxS(k).Name);
     end
+    
+    
 end
 
 title(ax3,'Substation GIC Difference')

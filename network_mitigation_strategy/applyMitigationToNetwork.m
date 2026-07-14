@@ -6,8 +6,8 @@ function [app, lineOpen, windingBlocked, desc] = ...
             i = idx;
             lineOpen(i) = true;
             if isfield(app.L,'ResKm')
-                app.L(i).ResKm = NaN;
-                app.L(i).Resistance = NaN;
+                app.L(i).ResKm = 1000000000;
+                app.L(i).Resistance = 1000000000;
             end
             desc = sprintf('Turned OFF line %s\n', app.L(i).Name);
             

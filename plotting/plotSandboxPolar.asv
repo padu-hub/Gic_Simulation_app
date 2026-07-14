@@ -5,12 +5,31 @@ function plotSandboxPolar(theta, ...
     app)
 
 theta = theta(:);
-oldLineNames = {app.OldSandboxL.Name};  % cell array expected
-% Quick exit: do not show anything if any required old data or names are missing
-if isempty(I_indResultsOld) || isempty(GICLinesResultsOld) || isempty(GICSubsResultsOld) || ...
-       isempty(oldLineNames) 
+if isempty(app) || ~isprop(app,'OldSandboxL') || isempty(app.OldSandboxL)
+    oldLineNames = {};
+else
+    oldLineNames = {app.OldSandboxL.Name};
+end
+
+if isempty(I_indResultsOld) || ...
+   isempty(GICLinesResultsOld) || ...
+   isempty(GICSubsResultsOld)
     return
 end
+
+tol = 1e-12;
+
+isSame = @(A,B) ...
+    isequal(size(A),size(B)) && ...
+    all(abs(A(:)-B(:)) < tol);
+
+if isSame(I_indResults,I_indResultsOld) && ...
+   isSame(GICLinesResults,GICLinesResultsOld) && ...
+   isSame(GICSubsResults,GICSubsResultsOld)
+
+    return
+end
+
 
 %% Merge duplicate OLD entries
 [I_indResultsOld, indNames] = mergeDuplicateNames(I_indResultsOld, oldLineNames);
@@ -20,9 +39,11 @@ end
 [GICLinesResults,    ~]         = mergeDuplicateNames(GICLinesResults,    {app.SandboxL.Name});
 
 %% Calculate differences
-dInd  = I_indResults  - I_indResultsOld;
-dLine = GICLinesResults - GICLinesResultsOld;
-dSub  = GICSubsResults - GICSubsResultsOld;
+dInd  = abs(I_indResults)  - abs(I_indResultsOld);
+dLine = abs(GICLinesResults) - abs(GICLinesResultsOld);
+dSub  = abs(GICSubsResults)  - abs(GICSubsResultsOld);
+
+
 
 %% Figure
 figure( ...
@@ -46,22 +67,16 @@ grid(ax1,'on')
 box(ax1,'on')
 
 for k = 1:size(dInd,2)
-
-    if all(abs(dInd(:,k))<1e-10)
+    y = dInd(:,k);
+    if all(~any(isfinite(y))) || all(abs(y(~isnan(y)))) || all(y(~isnan(y))==0)
         continue
     end
-
-    plot(ax1,...
-        theta,...
-        dInd(:,k),...
-        'LineWidth',2,...
-        'Color',co(k,:),...
-        'DisplayName',indNames{k});
-
+    h = plot(ax1, theta, y, 'LineWidth',2, 'Color',co(k,:));
+    % assign DisplayName only if there's something to show in legend
+    if any(isfinite(y)) && any(abs(y(~isnan(y)))>=tol)
+        set(h,'DisplayName',indNames{k});
+    end
 end
-
-yline(ax1,0,'k--');
-
 title(ax1,'Induced Current Difference')
 ylabel(ax1,'\Delta Current (A)')
 legend(ax1,'Location','eastoutside')
@@ -75,19 +90,18 @@ hold(ax2,'on')
 grid(ax2,'on')
 box(ax2,'on')
 
+% Line GIC
 for k = 1:size(dLine,1)
-
-    if all(abs(dLine(k,:))<1e-10)
+    y = dLine(k,:);
+    yn = y(~isnan(y));             % non-NaN elements
+    if ~any(isfinite(y)) || isempty(yn) || ~(k==1||k==3||k==5)
         continue
     end
 
-    plot(ax2,...
-        theta,...
-        dLine(k,:),...
-        'LineWidth',2,...
-        'Color',co(k,:),...
-        'DisplayName',lineNames{k});
-
+    h = plot(ax2, theta, y, 'LineWidth',2, 'Color',co(k,:));
+    if any(isfinite(y)) && any(abs(y(~isnan(y)))>=tol)
+        set(h,'DisplayName',lineNames{k});
+    end
 end
 
 title(ax2,'Line GIC Difference')
@@ -105,19 +119,18 @@ box(ax3,'on')
 
 coSub = lines(size(dSub,1));
 
-for k = 1:2
-
-    if all(abs(dSub(k,:))<1e-10)
+for k = 1:size(dSub,1)
+    y = dSub(k,:);
+    yn = y(~isnan(y));             % non-NaN elements
+    if ~any(isfinite(y)) || isempty(yn) ||  ~(k==1||k==2||k==3||k==4)
         continue
     end
-
-    plot(ax3,...
-        theta,...
-        dSub(k,:),...
-        'LineWidth',2,...
-        'Color',coSub(k,:),...
-        'DisplayName',app.SandboxS(k).Name);
-
+    h = plot(ax3, theta, y, 'LineWidth',2, 'Color',coSub(k,:));
+    if any(isfinite(y)) && any(abs(y(~isnan(y)))>=tol) 
+        set(h,'DisplayName',app.SandboxS(k).Name);
+    end
+    
+    
 end
 
 title(ax3,'Substation GIC Difference')

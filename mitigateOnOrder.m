@@ -1,4 +1,4 @@
-function mitigateOnOrder(app, idx_sorted)
+function results = mitigateOnOrder(app, idx_sorted)
 % Run mitigations in the provided order until all entries processed or
 % max transformer GIC < 5 A. Return per-step mitigation description,
 % total substation sum, max line value+name, max transformer value+name, and plot.
@@ -46,8 +46,8 @@ end
 
 % Main loop: stop if all processed OR last max transformer < 5 A
 % nCand = numel(idx_sorted);
-for k = 1:30
-    % if maxTrans(end) < 10 || sumSubs(end) < 50
+for k = 1:100
+    % if maxTrans(end) < 15 || sumSubs(end) < 50
     %     try
     %         app.StatusTextArea.Value = [app.StatusTextArea.Value; "Stopping: max transformer GIC < 5 A"];
     %         app.StatusTextArea.scroll('bottom');
@@ -56,9 +56,9 @@ for k = 1:30
     %     end
     %     break;
     % end
-    if k == 28
-        x=1;
-    end
+    % if k == 28
+    %     x=1;
+    % end
     lineIdx = idx_sorted(k);
 
     % apply mitigation (no winding/blocking arguments)
@@ -97,18 +97,18 @@ results.maxLineName     = maxLineName(:);
 results.idx_sorted      = idx_sorted(:);
 results.lineOpen        = lineOpen;
 
-% Save results with title "mass mitigation" and timestamp
-timestamp = datestr(now,'yyyy-mm-dd_HH-MM-SS');
-fname = sprintf('mass_mitigation_%s.mat', timestamp);
-save(fname, 'results');
-try
-    app.StatusTextArea.Value = [app.StatusTextArea.Value; ...
-        sprintf('Results saved: %s', fname)];
-    app.StatusTextArea.scroll('bottom');
-    drawnow limitrate;
-catch
-end
-plotGICMitigationResults(results)
+% % Save results with title "mass mitigation" and timestamp
+% timestamp = datestr(now,'yyyy-mm-dd_HH-MM-SS');
+% fname = sprintf('mass_mitigation_%s.mat', timestamp);
+% save(fname, 'results');
+% try
+%     app.StatusTextArea.Value = [app.StatusTextArea.Value; ...
+%         sprintf('Results saved: %s', fname)];
+%     app.StatusTextArea.scroll('bottom');
+%     drawnow limitrate;
+% catch
+% end
+%plotGICMitigationResults(results)
 app.L = app.OriginalL;
 app.T = app.OriginalT;
 end

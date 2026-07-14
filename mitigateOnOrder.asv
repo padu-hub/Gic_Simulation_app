@@ -1,4 +1,4 @@
-function mitigateOnOrder(app, idx_sorted)
+function results = mitigateOnOrder(app, idx_sorted)
 % Run mitigations in the provided order until all entries processed or
 % max transformer GIC < 5 A. Return per-step mitigation description,
 % total substation sum, max line value+name, max transformer value+name, and plot.
@@ -10,13 +10,7 @@ if nargin < 2
     error('Requires app and idx_sorted');
 end
 idx_sorted = idx_sorted(:);
-
-% Ensure masks exist or create defaults
-if isprop(app, 'lineOpen')
-    lineOpen = app.lineOpen;
-else
-    lineOpen = false(1, max(idx_sorted));
-end
+lineOpen       = false(numel(idx_sorted), 1);
 
 % Baseline simulation
 app.gic_originalS=[]; app.gic_originalL=[]; app.gic_originalT=[];
@@ -51,9 +45,9 @@ catch
 end
 
 % Main loop: stop if all processed OR last max transformer < 5 A
-nCand = numel(idx_sorted);
-for k = 1:nCand
-    if maxTrans(end) < 10 || sumSubs(end) < 50
+% nCand = numel(idx_sorted);
+for k = 1:numel(idx_sorted)
+    if maxTrans(end) < 15 || sumSubs(end) < 50
         try
             app.StatusTextArea.Value = [app.StatusTextArea.Value; "Stopping: max transformer GIC < 5 A"];
             app.StatusTextArea.scroll('bottom');
@@ -62,28 +56,14 @@ for k = 1:nCand
         end
         break;
     end
-
+    % if k == 28
+    %     x=1;
+    % end
     lineIdx = idx_sorted(k);
 
     % apply mitigation (no winding/blocking arguments)
-    try
-        [app, lineOpen,~, description] = ...
+    [app, lineOpen,~, description] = ...
             applyMitigationToNetwork(app, 'line', lineIdx, lineOpen,0);
-    catch ME
-        try
-            msg = sprintf('Error applying mitigation to line %d: %s', lineIdx, ME.message);
-            app.StatusTextArea.Value = [app.StatusTextArea.Value; msg];
-            app.StatusTextArea.scroll('bottom');
-            drawnow limitrate;
-        catch
-        end
-        break;
-    end
-    
-    % mark line open locally if in bounds
-    if lineIdx <= numel(lineOpen)
-        lineOpen(lineIdx) = true;
-    end
 
     % re-run sim and extract metrics
     [~, ~, ~, GIC_current] = runGIC_now(app);
@@ -98,61 +78,39 @@ for k = 1:nCand
     maxLineName{end+1}  = maxLNameN;
 
     % UI log per step
-    try
-        stepMsg = sprintf('Applied: %s | TotalSubSum=%.2f | MaxTrans=%.2f [%s] | MaxLine=%.2f [%s]', ...
-            char(description), sumN, maxTN, char(maxTNameN), maxLN, char(maxLNameN));
-        app.StatusTextArea.Value = [app.StatusTextArea.Value; string(description); stepMsg];
-        app.StatusTextArea.scroll('bottom');
-        drawnow limitrate;
-    catch
-    end
+    stepMsg = sprintf('Applied: %s | TotalSubSum=%.2f | MaxTrans=%.2f [%s] | MaxLine=%.2f [%s]', ...
+        char(description), sumN, maxTN, char(maxTNameN), maxLN, char(maxLNameN));
+    app.StatusTextArea.Value = [app.StatusTextArea.Value; string(description); stepMsg];
+    app.StatusTextArea.scroll('bottom');
+    drawnow limitrate;
+
 
 end
 
 % Package minimal results
 results.mitigationSteps = mitSteps(:);
-results.sumSubs         = sumSubs(:);
-results.maxTrans        = maxTrans(:);
+results.sumGICSubs      = sumSubs(:);
+results.maxTransGIC     = maxTrans(:);
 results.maxTransName    = maxTransName(:);
-results.maxLine         = maxLine(:);
+results.maxLinesGIC     = maxLine(:);
 results.maxLineName     = maxLineName(:);
 results.idx_sorted      = idx_sorted(:);
 results.lineOpen        = lineOpen;
 
-
-
-% Plot single combined figure (only graph requested)
+% Save results with title "mass mitigation" and timestamp
+timestamp = datestr(now,'yyyy-mm-dd_HH-MM-SS');
+fname = sprintf('mass_mitigation_%s.mat', timestamp);
+save(fname, 'results');
 try
-    nSteps = numel(sumSubs);
-    x = 0:(nSteps-1); % baseline at 0
-    figure('Name','Mitigation: Total Sub Sum and Max Line/Trans','NumberTitle','off');
-
-    % Top axes: total substation sum (left y)
-    ax1 = axes;
-    pSum = plot(ax1, x, sumSubs, '-k', 'LineWidth', 2); hold on;
-    xlabel('Mitigation Step (0 = Baseline)');
-    ylabel('Total Substation GIC Sum (A/phase)');
-    ax1.FontSize = 12;
-    grid(ax1, 'on');
-
-    % Secondary axis for bar plots (max trans and max line)
-    ax2 = axes('Position', ax1.Position);
-    yyaxis(ax2, 'right');
-    hold(ax2, 'on');
-    b1 = bar(ax2, x - 0.12, maxTrans, 0.24, 'FaceColor', [1 0.6 0.6], 'EdgeColor', [0.8 0.3 0.3]);
-    b2 = bar(ax2, x + 0.12, maxLine, 0.24, 'FaceColor', [0.4 0.6 1.0], 'EdgeColor', [0.1 0.2 0.8]);
-    ylabel(ax2, 'Max Transformer / Line GIC (A/phase)');
-    ax2.Color = 'none';
-    ax2.XTick = x;
-    xticklabels(ax2, cellstr(mitSteps));
-    xtickangle(45);
-    ax2.FontSize = 12;
-    legend([pSum, b1, b2], {'Total Sub Sum', 'Max Transformer', 'Max Line'}, 'Location','northeast');
-    linkaxes([ax1, ax2], 'x');
+    app.StatusTextArea.Value = [app.StatusTextArea.Value; ...
+        sprintf('Results saved: %s', fname)];
+    app.StatusTextArea.scroll('bottom');
+    drawnow limitrate;
 catch
-    % plotting best-effort; ignore failures silently
 end
-
+plotGICMitigationResults(results)
+app.L = app.OriginalL;
+app.T = app.OriginalT;
 end
 
 %% Helper: simplified metrics extractor (no winding detail)
