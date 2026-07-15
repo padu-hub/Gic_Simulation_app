@@ -16,7 +16,7 @@ function [idx_sorted, scores, comp] = rankLinesForMitigation(app, results)
 %   scores     - combined score (0-100) per line (aligned to 1..nLines)
 %   comp       - struct with per-line components (lenScore,gicScore,locScore)
 
-weights = 0:50:100;
+weights = [25,50,100];
 
 allSteps = cell(numel(weights),1);
 allGIC   = cell(numel(weights),1);
@@ -34,7 +34,7 @@ for k = 1:numel(weights)
             lenScore(i) = app.L(i).Length;
         end
     end
-    lenScore = normalize0tox(lenScore, k);
+    lenScore = normalize0tox(lenScore, weights(k));
     
     
     % --- 2) GIC score from results.rank.line(:,2) ---
@@ -121,40 +121,40 @@ for k = 1:numel(weights)
     
     % % four scatter plots (x = 0:(nL-1)) ---
     % try
-    %     x = 0:(nL-1);
-    %     assert(numel(lenScore)==nL && numel(gicScore)==nL && numel(scores)==nL && numel(locScore)==nL, ...
-    %         'Score vectors must be length nL.');
-    % 
-    %     % clamp to 0-100 for display
-    %     lenPlot = min(max(lenScore,0),100);
-    %     gicPlot = min(max(gicScore,0),100);
-    %     combPlot = min(max(scores,0),100);
-    %     locPlot = min(max(locScore,0),100);
-    % 
-    %     figure;
-    % 
-    %     tiledlayout(4,1,'Padding','compact','TileSpacing','compact');
-    % 
-    %     ax1 = nexttile;
-    %     scatter(ax1, x, gicPlot, 36, gicPlot, 'filled');
-    %     colorbar(ax1); xlabel(ax1,'Line index (0-based)'); ylabel(ax1,'GIC Score');
-    %     title(ax1,'GIC Score by Line'); grid(ax1,'on'); xlim(ax1,[min(x)-1 max(x)+1]);
-    % 
-    %     ax2 = nexttile;
-    %     scatter(ax2, x, lenPlot, 36, lenPlot, 'filled');
-    %     colorbar(ax2); xlabel(ax2,'Line index (0-based)'); ylabel(ax2,'Length Score');
-    %     title(ax2,'Length Score by Line'); grid(ax2,'on'); xlim(ax2,[min(x)-1 max(x)+1]);
-    % 
+        % x = 0:(nL-1);
+        % assert(numel(lenScore)==nL && numel(gicScore)==nL && numel(scores)==nL && numel(locScore)==nL, ...
+        %     'Score vectors must be length nL.');
+
+        % clamp to 0-100 for display
+        % lenPlot = min(max(lenScore,0),100);
+        % gicPlot = min(max(gicScore,0),100);
+        % combPlot = min(max(scores,0),100);
+        %locPlot = min(max(locScore,0),100);
+
+        % figure;
+        % 
+        % tiledlayout(4,1,'Padding','compact','TileSpacing','compact');
+        % 
+        % ax1 = nexttile;
+        % scatter(ax1, x, gicPlot, 36, gicPlot, 'filled');
+        % colorbar(ax1); xlabel(ax1,'Line index (0-based)'); ylabel(ax1,'GIC Score');
+        % title(ax1,'GIC Score by Line'); grid(ax1,'on'); xlim(ax1,[min(x)-1 max(x)+1]);
+        % 
+        % ax2 = nexttile;
+        % scatter(ax2, x, lenPlot, 36, lenPlot, 'filled');
+        % colorbar(ax2); xlabel(ax2,'Line index (0-based)'); ylabel(ax2,'Length Score');
+        % title(ax2,'Length Score by Line'); grid(ax2,'on'); xlim(ax2,[min(x)-1 max(x)+1]);
+
     %     ax3 = nexttile;
     %     scatter(ax3, x, locPlot, 36, locPlot, 'filled');
     %     colorbar(ax3); xlabel(ax3,'Line index (0-based)'); ylabel(ax3,'Loc Score');
     %     title(ax3,'Loc Score by Line'); grid(ax3,'on'); xlim(ax3,[min(x)-1 max(x)+1]);
     % 
-    %     ax4 = nexttile;
-    %     scatter(ax4, x, combPlot, 36, combPlot, 'filled');
-    %     colorbar(ax4); xlabel(ax4,'Line index (0-based)'); ylabel(ax4,'Combined Score');
-    %     title(ax4,'Combined Score by Line'); grid(ax4,'on'); xlim(ax4,[min(x)-1 max(x)+1]);
-    % 
+        % ax4 = nexttile;
+        % scatter(ax4, x, combPlot, 36, combPlot, 'filled');
+        % colorbar(ax4); xlabel(ax4,'Line index (0-based)'); ylabel(ax4,'Combined Score');
+        % title(ax4,'Combined Score by Line'); grid(ax4,'on'); xlim(ax4,[min(x)-1 max(x)+1]);
+
     %     linkaxes([ax1 ax2 ax3 ax4],'x');
     % catch ME
     %     warning('Failed to create score plots: %s', ME.message);
@@ -173,7 +173,7 @@ for k = 1:numel(weights)
     %     warning('Failed to save idx_sorted to file.');
     % end
 
-       % Run mitigation
+    % Run mitigation
     r = mitigateOnOrder(app, idx_sorted);
 
     % Store only what you need
