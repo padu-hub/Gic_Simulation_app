@@ -123,8 +123,8 @@ if uniform
     end
 elseif sandBoxMode
     for i = 1:nTimes
-        Ey = ex*cosd(theta(i)); %East
-        Ex = ex*sind(theta(i)); %North
+        Ex = ex*cosd(theta(i)); %North
+        Ey = ex*sind(theta(i)); %East
     
         V(i,:) = ...
             calc_line_voltage_uniform( ...

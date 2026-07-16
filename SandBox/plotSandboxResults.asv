@@ -24,6 +24,7 @@ function plotSandboxResults( ...
         nSubs = 2;
     end
 
+
     % -------------------------
     % Substation GICs
     % -------------------------
@@ -74,66 +75,55 @@ function plotSandboxResults( ...
     % -------------------------
     % Line GICs
     % -------------------------
-    ax = app.SBUIAxes2;
-    hold(ax,'on')
-    colorOrder = ax.ColorOrder;
-    nColors = size(colorOrder,1);
-    nLines = size(GICLinesResults,1);
-    nLinesOld = siz(GICLinesResultsOld,1);
-
-    for k = 1:nLines
-        if ~isnan(app.SandboxL(k).Resistance)
-            col = colorOrder(mod(k-1,nColors)+1,:);    
-            pCurr = plot(ax, theta, GICLinesResults(k,:), ...
-                'LineWidth',1.5, 'LineStyle','-', ...
-                'Color', col, 'DisplayName', app.SandboxL(k).Name);
-            uistack(pCurr,'top');
-        end
-    end
-    if showPrev && ~isempty(GICLinesResultsOld)
-        for k = 1:nLinesOld
-            if ~isnan(app.app.OldSandboxL(k).Resistance)
-                col = colorOrder(mod(k-1,nColors)+1,:);    
-                plot(ax, theta, GICLinesResultsOld(k,:), ...
-                    'LineWidth',1.5, 'LineStyle',':', ...
-                    'Color', col, 'HandleVisibility','off', 'DisplayName','');
-            end
-        end
-    end
-    hold(ax,'off')
-    grid(ax,'on')
-    xlabel(ax,'E-Field Orientation (deg)')
-    ylabel(ax,'GIC (A)')
-    title(ax,'Line GIC vs E-Field Orientation')
-    legend(ax,'show')
-
     % -------------------------
-    % Induced Currents
+    % Fixed colour for each base transmission line
     % -------------------------
-    ax = app.SBUIAxes3;
-    hold(ax,'on')
-    colorOrder = ax.ColorOrder;
-    nColors = size(colorOrder,1);
-    nEMFcols = size(I_indResults,2);
+    co = lines(5);
     
-    for k = 1:nEMFcols
-        if ~isnan(app.SandboxL(k).Resistance)
-            col = colorOrder(mod(k-1,nColors)+1,:);
+    lineColor.Line1      = co(1,:);
+    lineColor.Line1_ii   = lighten(co(1,:),0.35);
+    lineColor.Line1_iii  = lighten(co(1,:),0.65);
+    
+    lineColor.Line2      = co(2,:);
+    lineColor.Line2_ii   = lighten(co(2,:),0.35);
+    lineColor.Line2_iii  = lighten(co(2,:),0.65);
+    
+    lineColor.Line3      = co(3,:);
+    lineColor.Line3_ii   = lighten(co(3,:),0.35);
+    lineColor.Line3_iii  = lighten(co(3,:),0.65);
+    
+    lineColor.Line4      = co(4,:);
+    lineColor.Line4_ii   = lighten(co(4,:),0.35);
+    lineColor.Line4_iii  = lighten(co(4,:),0.65);
+    
+    lineColor.Line5      = co(5,:);
+    lineColor.Line5_ii   = lighten(co(5,:),0.35);
+    lineColor.Line5_iii  = lighten(co(5,:),0.65);
 
-            if showPrev && ~isempty(I_indResultsOld)
-  
-            end
-            
-            pCurr = plot(ax, theta, I_indResults(:,k), ...
-            'LineWidth',1.5, 'LineStyle','-', ...
-            'Color', col, 'DisplayName', app.SandboxL(k).Name);
-            uistack(pCurr,'top');
-        end
+    plotLineResults(...
+        app.SBUIAxes2,...
+        theta,...
+        GICLinesResults,...
+        GICLinesResultsOld,...
+        app,...
+        lineColor,...
+        showPrev,...
+        'Line GIC (A)',...
+        'Line GIC vs E-Field Orientation');
+    
+    plotLineResults(...
+        app.SBUIAxes3,...
+        theta,...
+        I_indResults,...
+        I_indResultsOld,...
+        app,...
+        lineColor,...
+        showPrev,...
+        'Induced Current (A)',...
+        'Induced Current vs E-Field Orientation');
+
+
     end
-
-    
-
-
     hold(ax,'off')
     grid(ax,'on')
     xlabel(ax,'E-Field Orientation (deg)')
@@ -142,12 +132,49 @@ function plotSandboxResults( ...
     legend(ax,'show')
 
 
-    plotSandboxPolar(theta,...
-        I_indResults,I_indResultsOld,...
-        GICLinesResults,GICLinesResultsOld,...
-        GICSubsResults,GICSubsResultsOld, app)
+    % plotSandboxPolar(theta,...
+    %     I_indResults,I_indResultsOld,...
+    %     GICLinesResults,GICLinesResultsOld,...
+    %     GICSubsResults,GICSubsResultsOld, app)
+    % plotSandboxSchematicDifferences( ...
+    % theta, ...
+    % I_indResults, I_indResultsOld, ...
+    % GICLinesResults, GICLinesResultsOld, ...
+    % GICSubsResults, GICSubsResultsOld, app)
 end
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+function c = lighten(c0,factor)
+
+% factor = 0 -> original colour
+% factor = 1 -> white
+
+c = c0 + factor*(1-c0);
+
+end
 
 
