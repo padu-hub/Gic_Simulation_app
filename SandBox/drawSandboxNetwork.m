@@ -8,7 +8,7 @@ function drawSandboxNetwork(app)
     hold(app.SandboxAxes,'on')
     grid(app.SandboxAxes,'on')
 
-    axis(app.SandboxAxes,[-50 50 -50 50])
+    axis(app.SandboxAxes,[-150 150 -150 150])
 
     app.SandboxAxes.XTick = [];
     app.SandboxAxes.YTick = [];

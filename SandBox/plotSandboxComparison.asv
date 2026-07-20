@@ -111,6 +111,11 @@ grid(ax,'on');
 
 co = lines(max(7,size(currentData,2)));
 
+% containers for legend
+hCurr = gobjects(0);
+hPrev = gobjects(0);
+labels = {};
+
 %=======================================================
 % SUBSTATION LOGIC
 %=======================================================
@@ -139,24 +144,27 @@ if isempty(oldObjects)
         %-----------------------------------------------
         % Previous
         %-----------------------------------------------
-        plot(ax,...
+        hPrev(end+1) = plot(ax,...
             theta,...
             old,...
             '--',...
             'Color',col,...
-            'LineWidth',1.5,...
-            'HandleVisibility','off');
+            'LineWidth',1.5);
 
         %-----------------------------------------------
         % Current
         %-----------------------------------------------
-        plot(ax,...
+        hCurr(end+1) = plot(ax,...
             theta,...
             curr,...
             '-',...
             'Color',col,...
             'LineWidth',2,...
             'DisplayName',currentObjects(k).Name);
+
+        % labels: keep both variants
+        labels{end+1} = sprintf('%s (current)', currentObjects(k).Name);
+        labels{end+1} = sprintf('%s (previous)', currentObjects(k).Name);
 
     end
 
@@ -171,80 +179,110 @@ else
     allNames = unique([currNames oldNames],'stable');
 
     for k = 1:numel(allNames)
-    %for k = 1:2
-    if k==1||k==6
-        lineName = allNames{k};
+        if k==1||k==6
+            lineName = allNames{k};
 
-        idxCurr = find(strcmp(currNames,lineName),1);
-        idxOld  = find(strcmp(oldNames,lineName),1);
+            idxCurr = find(strcmp(currNames,lineName),1);
+            idxOld  = find(strcmp(oldNames,lineName),1);
 
-        %-----------------------------------------------
-        % Current values
-        %-----------------------------------------------
-        if isempty(idxCurr)
-            curr = zeros(numel(theta),1);
-        else
-            if size(currentData,1) == numel(theta)
-                curr = currentData(:,idxCurr);
+            %-----------------------------------------------
+            % Current values
+            %-----------------------------------------------
+            if isempty(idxCurr)
+                curr = zeros(numel(theta),1);
             else
-                curr = currentData(idxCurr,:)';
+                if size(currentData,1) == numel(theta)
+                    curr = currentData(:,idxCurr);
+                else
+                    curr = currentData(idxCurr,:)';
+                end
             end
-        end
 
-        %-----------------------------------------------
-        % Previous values
-        %-----------------------------------------------
-        if isempty(idxOld)
-            old = zeros(numel(theta),1);
-        else
-            if size(oldData,1) == numel(theta)
-                old = oldData(:,idxOld);
+            %-----------------------------------------------
+            % Previous values
+            %-----------------------------------------------
+            if isempty(idxOld)
+                old = zeros(numel(theta),1);
             else
-                old = oldData(idxOld,:)';
+                if size(oldData,1) == numel(theta)
+                    old = oldData(:,idxOld);
+                else
+                    old = oldData(idxOld,:)';
+                end
             end
+
+            %-----------------------------------------------
+            % Skip if identical
+            %-----------------------------------------------
+            if max(abs(curr-old)) < 1e-12
+                continue
+            end
+
+            col = co(mod(k-1,size(co,1))+1,:);
+
+            %-----------------------------------------------
+            % Previous
+            %-----------------------------------------------
+            hPrev(end+1) = plot(ax,...
+                theta,...
+                old,...
+                '--',...
+                'Color',col,...
+                'LineWidth',1.5);
+
+            %-----------------------------------------------
+            % Current
+            %-----------------------------------------------
+            hCurr(end+1) = plot(ax,...
+                theta,...
+                curr,...
+                '-',...
+                'Color',col,...
+                'LineWidth',2,...
+                'DisplayName',lineName);
+
+            % labels: keep both variants
+            labels{end+1} = sprintf('%s (current)', lineName);
+            labels{end+1} = sprintf('%s (previous)', lineName);
         end
-
-        %-----------------------------------------------
-        % Skip if identical
-        %-----------------------------------------------
-        if max(abs(curr-old)) < 1e-12
-            continue
-        end
-
-        col = co(mod(k-1,size(co,1))+1,:);
-
-        %-----------------------------------------------
-        % Previous
-        %-----------------------------------------------
-        plot(ax,...
-            theta,...
-            old,...
-            '--',...
-            'Color',col,...
-            'LineWidth',1.5,...
-            'HandleVisibility','off');
-
-        %-----------------------------------------------
-        % Current
-        %-----------------------------------------------
-        plot(ax,...
-            theta,...
-            curr,...
-            '-',...
-            'Color',col,...
-            'LineWidth',2,...
-            'DisplayName',lineName);
-    end
     end
 
 end
 
 %-------------------------------------------------------
-% Labels
+% Labels and paired legend (current, previous)
 %-------------------------------------------------------
 xlabel(ax,'E-Field Angle (°)');
 ylabel(ax,yLabel);
 title(ax,plotTitle);
-legend(ax,'show','Location','eastoutside');
+
+% if no current handles, nothing to do
+if isempty(hCurr)
+    return
+end
+
+% ensure hCurr and hPrev are same length by padding with invisible dummies
+nCurr = numel(hCurr);
+nPrev = numel(hPrev);
+N = max(nCurr,nPrev);
+
+for ii = nCurr+1:N
+    hCurr(ii) = plot(ax, NaN, NaN, '-', 'Visible', 'off'); %#ok<AGROW>
+end
+for ii = nPrev+1:N
+    hPrev(ii) = plot(ax, NaN, NaN, '--', 'Visible', 'off'); %#ok<AGROW>
+end
+
+% build names from the solid (current) handles' DisplayName
+names = arrayfun(@(h) get(h,'DisplayName'), hCurr, 'UniformOutput', false);
+
+% legend: solids in column 1 with names; dashed in column 2 with empty labels
+allHandles = [hCurr, hPrev];
+allLabels  = [names, repmat({''},1,N)];
+
+lgd = legend(ax, allHandles, allLabels, 'Location', 'eastoutside');
+lgd.NumColumns = 2;
+lgd.AutoUpdate = 'off';
+
 
 end

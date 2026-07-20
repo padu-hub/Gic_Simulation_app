@@ -30,7 +30,7 @@ for i = 1:length(dVals)
 
     %for j = 1:length(rVals)
 
-        %r = rVals(j);
+        r = rVals(j);
 
         S = S0;
         L = L0;
@@ -57,8 +57,8 @@ for i = 1:length(dVals)
         % ---------------------------------------------
         % Change Corridor Resistance
         % ---------------------------------------------
-        % L(1).ResKm = r;
-        % L(2).ResKm = r;
+        L(1).ResKm = r;
+        L(2).ResKm = r;
 
         % ---------------------------------------------
         % Rebuild Lengths
@@ -155,37 +155,34 @@ for i = 1:length(dVals)
 
 end
 
+% =====================================================
+% Plot
+% =====================================================
+[R,D] = meshgrid(rVals,dVals);
 
+figure('Color','w')
 
+for s = 1:nSubs
 
-% % =====================================================
-% % Plot
-% % =====================================================
-% [R,D] = meshgrid(rVals,dVals);
-% 
-% figure('Color','w')
-% 
-% for s = 1:nSubs
-% 
-%     subplot(2,ceil(nSubs/2),s)
-% 
-%     surf(R,D,DeltaPeak(:,:,s))
-% 
-%     shading interp
-% 
-%     xlabel('ResKm')
-% 
-%     ylabel('Stretch')
-% 
-%     zlabel('\Delta Peak GIC (A)')
-% 
-%     title(sprintf('Sub %d',s))
-% 
-%     colorbar
-% 
-%     view(135,30)
-% end
-% 
-% sgtitle('Peak GIC Change (Disconnected - Connected)')
-% 
-% end
+    subplot(2,ceil(nSubs/2),s)
+
+    surf(R,D,DeltaPeak(:,:,s))
+
+    shading interp
+
+    xlabel('ResKm')
+
+    ylabel('Stretch')
+
+    zlabel('\Delta Peak GIC (A)')
+
+    title(sprintf('Sub %d',s))
+
+    colorbar
+
+    view(135,30)
+end
+
+sgtitle('Peak GIC Change (Disconnected - Connected)')
+
+end
