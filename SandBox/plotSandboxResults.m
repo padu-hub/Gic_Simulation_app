@@ -105,7 +105,8 @@ function plotSandboxResults( ...
         theta,...
         GICLinesResults,...
         GICLinesResultsOld,...
-        app,...
+        app.SandboxL,...
+        app.OldSandboxL,...
         lineColor,...
         showPrev,...
         'Line GIC (A)',...
@@ -116,17 +117,21 @@ function plotSandboxResults( ...
         theta,...
         I_indResults,...
         I_indResultsOld,...
-        app,...
+        app.SandboxL,...
+        app.OldSandboxL,...
         lineColor,...
         showPrev,...
         'Induced Current (A)',...
         'Induced Current vs E-Field Orientation');
 
 
-    % plotSandboxPolar(theta,...
-    %     I_indResults,I_indResultsOld,...
-    %     GICLinesResults,GICLinesResultsOld,...
-    %     GICSubsResults,GICSubsResultsOld, app)
+    plotSandboxComparison(theta,...
+    I_indResults,I_indResultsOld,...
+    GICLinesResults,GICLinesResultsOld,...
+    GICSubsResults,GICSubsResultsOld,...
+    app)
+
+    
     % plotSandboxSchematicDifferences( ...
     % theta, ...
     % I_indResults, I_indResultsOld, ...
@@ -142,7 +147,165 @@ end
 
 
 
+function plotLineResults(ax,theta,currentData,oldData,...
+    currentLines,oldLines,...
+    lineColor,showPrev,...
+    yLabel,plotTitle)
 
+% -------------------------------------------------------
+% Clear axis
+% -------------------------------------------------------
+cla(ax)
+hold(ax,'on')
+grid(ax,'on')
+
+% -------------------------------------------------------
+% Build list of all line names
+% -------------------------------------------------------
+currNames = {currentLines.Name};
+
+if isempty(oldLines)
+    oldNames = {};
+else
+    oldNames = {oldLines.Name};
+end
+
+allNames = unique([currNames oldNames],'stable');
+
+nTheta = numel(theta);
+
+% -------------------------------------------------------
+% Plot every line
+% -------------------------------------------------------
+for k = 1:numel(allNames)
+
+    lineName = allNames{k};
+
+    %---------------------------------------
+    % Colour
+    %---------------------------------------
+    if ~isfield(lineColor,lineName)
+        continue
+    end
+
+    col = lineColor.(lineName);
+
+    %---------------------------------------
+    % Start as zero vectors
+    %---------------------------------------
+    curr = zeros(nTheta,1);
+    old  = zeros(nTheta,1);
+
+    %---------------------------------------
+    % Current network
+    %---------------------------------------
+    idxCurr = find(strcmp(currNames,lineName),1);
+
+    if ~isempty(idxCurr)
+
+        if ~isnan(currentLines(idxCurr).Resistance)
+
+            % Data stored as theta x lines
+            if size(currentData,1) == nTheta
+                curr = currentData(:,idxCurr);
+
+            % Data stored as lines x theta
+            else
+                curr = currentData(idxCurr,:)';
+            end
+
+        end
+
+    end
+
+    %---------------------------------------
+    % Previous network
+    %---------------------------------------
+    idxOld = find(strcmp(oldNames,lineName),1);
+
+    if ~isempty(idxOld)
+
+        if ~isnan(oldLines(idxOld).Resistance)
+
+            % Data stored as theta x lines
+            if size(oldData,1) == nTheta
+                old = oldData(:,idxOld);
+
+            % Data stored as lines x theta
+            else
+                old = oldData(idxOld,:)';
+            end
+
+        end
+
+    end
+
+    %---------------------------------------
+    % Skip if both are zero
+    %---------------------------------------
+    if isAllZero(curr) && isAllZero(old)
+        continue
+    end
+
+    %---------------------------------------
+    % Plot previous
+    %---------------------------------------
+    if showPrev
+
+        plot(ax,...
+            theta,...
+            old,...
+            ':',...
+            'Color',col,...
+            'LineWidth',1.5,...
+            'HandleVisibility','off');
+
+    end
+
+    %---------------------------------------
+    % Plot current
+    %---------------------------------------
+    h = plot(ax,...
+        theta,...
+        curr,...
+        'Color',col,...
+        'LineWidth',1.5,...
+        'DisplayName',lineName);
+
+    uistack(h,'top')
+
+end
+
+% -------------------------------------------------------
+% Formatting
+% -------------------------------------------------------
+xlabel(ax,'E-Field Orientation (deg)')
+ylabel(ax,yLabel)
+title(ax,plotTitle)
+legend(ax,'show','Location','eastoutside')
+
+hold(ax,'off')
+
+end
+
+
+%========================================================
+% Helper
+%========================================================
+function tf = isAllZero(x)
+
+tol = 1e-12;
+
+if isempty(x)
+    tf = true;
+    return
+end
+
+x = x(~isnan(x));
+
+tf = isempty(x) || all(abs(x)<tol);
+
+end
 
 
 
