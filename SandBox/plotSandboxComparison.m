@@ -207,9 +207,9 @@ else
         %-----------------------------------------------
         % Skip if identical
         %-----------------------------------------------
-        if max(abs(curr-old)) < 1e-12
-            continue
-        end
+        % if max(abs(curr-old)) < 1e-12
+        %     continue
+        % end
 
         col = co(mod(k-1,size(co,1))+1,:);
 
@@ -246,5 +246,6 @@ xlabel(ax,'E-Field Angle (°)');
 ylabel(ax,yLabel);
 title(ax,plotTitle);
 legend(ax,'show','Location','eastoutside');
+set(ax, 'FontSize', 16);
 
 end

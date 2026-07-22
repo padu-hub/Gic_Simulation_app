@@ -16,7 +16,7 @@ function [idx_sorted, scores, comp] = rankLinesForMitigation(app, results)
 %   scores     - combined score (0-100) per line (aligned to 1..nLines)
 %   comp       - struct with per-line components (lenScore,gicScore,locScore)
 
-weights = 0:10:100;
+weights = [0,100];
 
 allSteps = cell(numel(weights),1);
 allGIC   = cell(numel(weights),1);
@@ -72,7 +72,7 @@ for k = 1:numel(weights)
     %         reskm(i) = app.L(i).ResKm;
     %     end
     % end
-    
+    % 
     % % Find groups of identical Loc (pairwise compare)
     % assigned = false(nL,1);
     % for i = 1:nL
@@ -90,32 +90,33 @@ for k = 1:numel(weights)
     %         rvals(isnan(rvals)) = -Inf;
     %         [~, maxPos] = max(rvals);
     %         maxIdx = group(maxPos);
-    %         locScore(group) = 20;
+    %         locScore(group) = weights(k);
     %         locScore(maxIdx) = 0;
     %     end
     %     assigned(group) = true;
     % end
     
     
-    
     % --- Combine components ---
     % If any component has NaN (e.g. missing Length), treat its score as 0.
-    lenScore(isnan(lenScore)) = 0;
+    %lenScore(isnan(lenScore)) = 0;
     gicScore(isnan(gicScore)) = 0;
     %locScore(isnan(locScore)) = 0;
-    
+    lenScore(isnan(lenScore)) = 0;
+
     % Combine by simple average (equal weighting)
     %scores = (lenScore + gicScore + locScore) / 3;
-    scores = (lenScore + gicScore) / 2;
+    scores = (gicScore + lenScore) / 2;
     
     % Sort descending to produce idx_sorted
     [~, order] = sort(scores, 'descend', 'MissingPlacement', 'last');
     idx_sorted = lineIdxAll(order);
     
     % Package components for output
-    comp.lenScore = lenScore;
+    %comp.lenScore = lenScore;
     comp.gicScore = gicScore;
-    %comp.locScore = locScore;
+    comp.lenScore = lenScore;
+    
     
     
     
@@ -220,7 +221,7 @@ end
 
 xlabel('Mitigation Step');
 ylabel('Sum of GIC at Substations');
-title('Effect of Length Weighting');
+title('Effect of Length and Multi circuit Weighting disconnection');
 legend('show');
 grid on;
 
