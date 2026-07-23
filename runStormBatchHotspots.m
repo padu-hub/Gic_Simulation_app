@@ -29,7 +29,7 @@ transNames = string({T.Name}).';
 % Initialize cell arrays to collect 15-min-windowed mean absolute samples
 subSamples  = cell(nSubs,1);
 lineSamples = cell(nLines,1);
-transSamples = cell(nTrans,1);
+transSamples = cell(nTrans,2);
 
 eventsUsed = {};
 
@@ -78,25 +78,38 @@ for ei = 1:nEvents
         end
     end
 
-    % Transformers: combine windings by concatenating per transformer
+    % Initialize transSamples as cell or struct array beforehand:
+    nT = size(gicTrans,1);
+    transSamples = repmat(struct('w1',[],'w2',[]), nT, 1); % for exactly 2 windings
+    
+    % Populate per transformer/winding( w1 and w2)
     if ndims(gicTrans) == 3
         nW = size(gicTrans,2);
-        for ti = 1:size(gicTrans,1)
-            allSamples = [];
+        for ti = 1:nT
             for w = 1:nW
-                wmat = squeeze(gicTrans(ti,w,:)).';
-                if isempty(wmat), continue; end
-                s = split_movmean_abs(wmat, wSamp); % returns cell if vector
-                % split_movmean_abs returns cell per column; for vector it's single cell
+                wvec = squeeze(gicTrans(ti,w,:)).';
+                if isempty(wvec), continue; end
+                s = split_movmean_abs(wvec, wSamp);
                 if iscell(s), s = s{1}; end
-                allSamples = [allSamples; s]; 
+    
+                switch w
+                    case 1
+                        if isempty(transSamples(ti).w1)
+                            transSamples(ti).w1 = s;
+                        else
+                            transSamples(ti).w1 = [transSamples(ti).w1; s];
+                        end
+                    otherwise
+                        if isempty(transSamples(ti).w2)
+                            transSamples(ti).w2 = s;
+                        else
+                            transSamples(ti).w2 = [transSamples(ti).w2; s];
+                        end
+                end
             end
-            if isempty(allSamples)
-                continue;
-            end
-            transSamples{ti} = [transSamples{ti}; allSamples];
         end
     end
+
 
     eventsUsed{end+1} = fileNames{ei}; 
 end

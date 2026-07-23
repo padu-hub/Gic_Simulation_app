@@ -20,16 +20,21 @@ function [app, lineOpen, windingBlocked, desc] = ...
 
             if w == 1
                 if isfield(app.T,'W1')
-                    app.T(k).W1 = NaN;
+                    app.T(k).W1 = 100000000000;
+                end
+            elseif w == 2
+                if isfield(app.T,'W2')
+                    app.T(k).W2 = 100000000000;
                 end
             else
-                if isfield(app.T,'W2')
-                    app.T(k).W2 = NaN;
+                if isfield(app.T,'W1') && isfield(app.T,'W2')
+                    app.T(k).W1 = 100000000000;
+                    app.T(k).W2 = 100000000000;
                 end
             end
 
             desc = sprintf('Blocked transformer %d winding W%d\n', app.T(k).Name, w);
-
+        
         otherwise
             error('Unknown mitigation type.');
     end
