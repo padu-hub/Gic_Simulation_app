@@ -20,7 +20,7 @@ switch modeStr
     case 'original'
         activeLineMitigation    = true;
         activeWindingMitigation = true;
-        lineMode    = 'all';
+        lineMode    = 'allLines';
         windingMode = 'all';
 
     case 'windings_only'
@@ -285,11 +285,7 @@ results.parallelGroups = parallelGroups;
 results.modeStr        = modeStr;
 
 %% Save results and plot
-save('mitigation_results.mat', ...
-    'mitigations', 'sumGICSubs', 'maxTransGIC', 'maxLinesGIC', ...
-    'maxTransName', 'maxLineName');
-
-save('mitigation_results_full.mat', 'results')
+save('mitigation_results.mat', 'results')
 plotGICMitigationResults(results);
 
 
@@ -324,13 +320,15 @@ plotGICMitigationResults(results);
         sumVal  = max(totPerT, [], 'omitnan');
 
         % Max transformer winding GIC
-        if isfield(GIC, 'Trans') && ~isempty(GIC.Trans)
-            transAbs       = abs(GIC.Trans);
+        if isfield(GIC, 'Trans') && ~isempty(GIC.Trans)            
+            % Take absolute after summing windings 
+            transAbs = squeeze(sum(abs(GIC.Trans), 2)); 
             [maxT, linIdx] = max(transAbs, [], 'all', 'omitnan');
 
             if isempty(maxT) || isnan(maxT)
                 maxT = 0; maxTName = "None";
             else
+                [row, col] = ind2sub(size(transAbs), linIdx);
                 [tIdx, wIdx] = ind2sub(size(transAbs), linIdx);
                 if isfield(app.T(tIdx), 'Name')
                     maxTName = string(app.T(tIdx).Name) + " (W" + wIdx + ")";
@@ -363,3 +361,4 @@ plotGICMitigationResults(results);
     end
 
 end
+

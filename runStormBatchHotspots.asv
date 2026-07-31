@@ -1,448 +1,314 @@
-function results = runStormBatchHotspots(app, S, L, T)
-% =========================================================================
-% runStormBatchHotspots
+function runStormBatchHotspots(app, S, L, T)
+% runStormBatchHotspots_15minSamples  Collect 15-min mean |GIC| samples across events,
+% rank sites by sum of those samples, and plot boxplots for top-20 each of lines, subs, trans.
 %
-% Batch-runs historical E-field events on one Alberta grid, computes:
-%   - Substation max 15-min mean |GIC| per event
-%   - Transformer winding-1 max 15-min mean |GIC| per event (stored only)
+% Usage:
+%   results = runStormBatchHotspots_15minSamples(app, S, L, T)
 %
-% Also generates summary plots (NOT bubble maps):
-%   1) Heatmap: substations x events (max 15-min mean)
-%   2) Top-N bar: persistent hotspots (median across events)
-%   3) Box/whisker: distribution across storms for Top-N substations,
-%   transformers and lines.
-%   4) Rank-consistency: median rank across events (lower = more consistently high)
-%
-% Your bubble map (substation bubbles) can use:
-%   results.aggregate.sub.median15  (or max15/mean15)
-%   results.sub.Latitude / Longitude
-%
-% =========================================================================
+% Output (results):
+%   .samples.sub   - cell [nSubs x 1] of vectors (all 15-min samples across events)
+%   .samples.line  - cell [nLines x 1]
+%   .samples.trans - cell [nTrans x 1] (combines winding samples)
+%   .eventsUsed    - cell array of event filenames used
+%   .rank.sub/.line/.trans - table with Name, Sum, Rank, Nsamples
 
-    % ---------------------------------------------------------------------
-    % Select event files
-    % ---------------------------------------------------------------------
-    [fileNames, pathName] = uigetfile('*.mat', ...
-        'Select E-field event .mat files', 'MultiSelect', 'on');
+% Select event files
+[fileNames, pathName] = uigetfile('*.mat', ...
+    'Select E-field event .mat files', 'MultiSelect', 'on');
+if isequal(fileNames,0)
+    results = struct(); return;
+end
+if ischar(fileNames), fileNames = {fileNames}; end
+nEvents = numel(fileNames);
+
+nSubs  = numel(S); nLines = numel(L); nTrans = max(1,numel(T));
+subNames  = string({S.Name}).';
+lineNames = string({L.Name}).';
+transNames = string({T.Name}).';
+
+% Initialize cell arrays to collect 15-min-windowed mean absolute samples
+subSamples  = cell(nSubs,1);
+lineSamples = cell(nLines,1);
+transSamples = cell(nTrans,2);
+
+eventsUsed = {};
+
+for ei = 1:nEvents
+    fpath = fullfile(pathName, fileNames{ei});
+    dat = load(fpath);
+    if ~isfield(dat,'data'), continue; end
+    data = dat.data;
+    req = {'ex','ey','latq','lonq','tind','b'};
+    if any(~isfield(data, req)) || ~isfield(data.b,'times'), continue; end
+
+    ex   = data.ex; ey = data.ey;
+    latq = data.latq; lonq = data.lonq;
+    tind = data.tind(:);
+    timeVec = data.b(1).times(tind);
+
+    % Run GIC simulation
+    app.gic_originalS = []; app.gic_originalL = []; app.gic_originalT = [];
+    [~,~,~,GIC_temp] = calc_gic_main(app, S, L, T, ...
+        ex, ey, latq, lonq, tind, app.OriginalL, app.OriginalT);
+    if ~isfield(GIC_temp,'Original_Subs'), continue; end
+
+    gicSubs  = GIC_temp.Original_Subs;   % [nSubs x nTime]
+    gicLine  = GIC_temp.Original_Lines;  % [nLines x nTime]
+    gicTrans = GIC_temp.Original_Trans;  % [nTrans x nW x nTime]
+
+    % Determine window length (samples) for 15 minutes for this event
+    wSamp = windowSamplesFromDatetime(timeVec, minutes(15));
+
+    % Helper to compute moving-mean of abs and return column-wise time samples
+    movmean_abs_samples = @(X) conditional_split(X, wSamp);
+
+    % Substations
+    if ~isempty(gicSubs)
+        Ssamples = movmean_abs_samples(gicSubs); % cell: one cell per site (column)
+        for k = 1:numel(Ssamples)
+            subSamples{k} = [subSamples{k}; Ssamples{k}];
+        end
+    end
+
+    % Lines
+    if ~isempty(gicLine) && ismatrix(gicLine)
+        Lsamples = movmean_abs_samples(gicLine);
+        for k = 1:numel(Lsamples)
+            lineSamples{k} = [lineSamples{k}; Lsamples{k}]; 
+        end
+    end
+
+    % Initialize transSamples as cell or struct array beforehand:
+    nT = size(gicTrans,1);
+    transSamples = repmat(struct('w1',[],'w2',[]), nT, 1); % for exactly 2 windings
     
-    if isequal(fileNames,0)
-        results = struct();
-        return;
-    end
-    if ischar(fileNames)
-        fileNames = {fileNames};
-    end
-
-    % ---------------------------------------------------------------------
-    % Substation metadata 
-    % ---------------------------------------------------------------------
-    nSubs = numel(S);
-    results.sub.Name      = string({S.Name}).';
-    results.sub.Latitude  = reshape([S.Latitude],  [], 1);
-    results.sub.Longitude = reshape([S.Longitude], [], 1);
-
-    % ---------------------------------------------------------------------
-    % Transformer metadata 
-    % ---------------------------------------------------------------------
-    nTrans = numel(T);
-    if nTrans > 0
-        results.trans.Name = string({T.Name}).';
-    else
-        results.trans.Name = strings(0,1);
-    end
-
-    % ---------------------------------------------------------------------
-    % Lines metadata 
-    % ---------------------------------------------------------------------
-    nLines = numel(L);
-    if nLines > 0 && isstruct(L) && isfield(L,'Name')
-        results.line.Name = string({L.Name}).';
-    else
-        results.line.Name = strings(0,1);
-    end
-
-    % ---------------------------------------------------------------------
-    % Pre-allocate event containers
-    % ---------------------------------------------------------------------
-    nEvents = numel(fileNames);
-    results.events = repmat(struct(), nEvents, 1);
-
-    subMat      = nan(nSubs,  nEvents);
-    transMat_w1 = nan(nTrans, nEvents);
-    transMat_w2 = nan(nTrans, nEvents);
-    lineMat     = nan(nLines, nEvents);
-
-    % ---------------------------------------------------------------------
-    % Loop through all events
-    % ---------------------------------------------------------------------
-    for i = 1:nEvents
-
-        % -----------------------------
-        % Load event file
-        % -----------------------------
-        fpath  = fullfile(pathName, fileNames{i});
-        loaded = load(fpath);
-
-        if ~isfield(loaded,'data')
-            warning('Skipping "%s": missing data struct.', fileNames{i});
-            continue;
-        end
-
-        data = loaded.data;
-
-        % -----------------------------
-        % Validate required fields
-        % -----------------------------
-        req = {'ex','ey','latq','lonq','tind','b'};
-        if any(~isfield(data, req)) || ~isfield(data.b,'times')
-            warning('Skipping "%s": missing required fields.', fileNames{i});
-            continue;
-        end
-
-        % -----------------------------
-        % Parse event time range from filename (if possible)
-        % -----------------------------
-        [~, baseName, ~] = fileparts(fileNames{i});
-        [tStartName, tEndName] = parseEventTimesFromFileName(baseName);
-        
-        % -----------------------------
-        % Extract inputs
-        % -----------------------------
-        ex   = data.ex;
-        ey   = data.ey;
-        latq = data.latq;
-        lonq = data.lonq;
-
-        tind    = data.tind(:);
-        timeVec = data.b(1).times(tind);
-
-        % -----------------------------
-        % Run GIC simulation
-        % -----------------------------
-        app.gic_originalS = [];
-        app.gic_originalL = [];
-        app.gic_originalT = [];
-        [~,~,~,GIC_temp,~,~,~,~] = ...
-            calc_gic_main(app, S, L, T, ...
-                          ex, ey, latq, lonq, ...
-                          tind, ...
-                          app.OriginalL, app.OriginalT);
-
-        % -----------------------------
-        % Validate GIC output
-        % -----------------------------
-        if ~isfield(GIC_temp,'Original_Subs')
-            warning('Skipping "%s": GIC_temp missing Original_Subs.', fileNames{i});
-            continue;
-        end
-
-        gicSubs  = GIC_temp.Original_Subs;   % [nSubs  x nTime]
-        gicTrans = GIC_temp.Original_Trans;  % [nTrans x nW x nTime]
-        gicLine  = GIC_temp.Original_Lines;  % [nLines x nTime]
-
-        if size(gicSubs,1) ~= nSubs
-            warning('Event "%s": Original_Subs row count mismatch (expected %d).', baseName, nSubs);
-        end
-
-        % -----------------------------
-        % Window size in samples
-        % -----------------------------
-        wSamp = windowSamplesFromDatetime(timeVec, minutes(15));
-
-        % -----------------------------
-        % Substations
-        % -----------------------------
-        sub_max15    = maxMovMeanAbs_2D(gicSubs, wSamp);
-        subMat(:,i)  = sub_max15(:);
-
-        % -----------------------------
-        % Lines
-        % -----------------------------
-        if ismatrix(gicLine) && size(gicLine,2) == numel(tind)
-            line_max15 = maxMovMeanAbs_2D(gicLine, wSamp);
-        else
-            warning('Event "%s": Original_Lines shape unexpected; filling with NaN.', baseName);
-            line_max15 = nan(nLines,1);
-        end
-        lineMat(:,i) = line_max15(:);
-
-        % -----------------------------
-        % Transformers (W1 and W2)
-        % -----------------------------
-        if ndims(gicTrans) == 3 && size(gicTrans,1) == nTrans && size(gicTrans,3) == numel(tind)
-            gicW1          = squeeze(gicTrans(:,1,:));
-            trans_max15_w1 = maxMovMeanAbs_2D(gicW1, wSamp);
-            if size(gicTrans,2) >= 2
-                gicW2          = squeeze(gicTrans(:,2,:));
-                trans_max15_w2 = maxMovMeanAbs_2D(gicW2, wSamp);
-            else
-                trans_max15_w2 = nan(nTrans,1);
+    % Populate per transformer/winding( w1 and w2)
+    if ndims(gicTrans) == 3
+        nW = size(gicTrans,2);
+        for ti = 1:nT
+            for w = 1:nW
+                wvec = squeeze(gicTrans(ti,w,:)).';
+                if isempty(wvec), continue; end
+                s = split_movmean_abs(wvec, wSamp);
+                if iscell(s), s = s{1}; end
+    
+                switch w
+                    case 1
+                        if isempty(transSamples(ti).w1)
+                            w1 = s;
+                        else
+                            .w1 = [transSamples(ti).w1; s];
+                        end
+                    otherwise
+                        if isempty(transSamples(ti).w2)
+                            transSamples(ti).w2 = s;
+                        else
+                            transSamples(ti).w2 = [transSamples(ti).w2; s];
+                        end
+                end
             end
-        else
-            warning('Event "%s": Original_Trans shape unexpected; filling with NaN.', baseName);
-            trans_max15_w1 = nan(nTrans,1);
-            trans_max15_w2 = nan(nTrans,1);
         end
-        transMat_w1(:,i) = trans_max15_w1(:);
-        transMat_w2(:,i) = trans_max15_w2(:);
-
-        
-        % -----------------------------
-        % All 15-min windowed averages for the event (per site/component)
-        % -----------------------------
-        % Substations: moving mean of absolute GIC across time
-        sub_mov = movmean(abs(gicSubs), wSamp, 2, 'Endpoints', 'shrink'); % [nSubs x nTime]
-        results.events(i).sub_movmean15 = sub_mov;
-
-        % Lines
-        if ismatrix(gicLine) && size(gicLine,2) == numel(tind)
-            line_mov = movmean(abs(gicLine), wSamp, 2, 'Endpoints', 'shrink');
-        else
-            line_mov = nan(nLines, numel(tind));
-        end
-        results.events(i).line_movmean15 = line_mov;
-
-        % Transformers: W1 and W2
-        if ndims(gicTrans) == 3 && size(gicTrans,3) == numel(tind)
-            if size(gicTrans,2) >= 1
-                gicW1 = squeeze(gicTrans(:,1,:)); % [nTrans x nTime]
-                w1_mov = movmean(abs(gicW1), wSamp, 2, 'Endpoints', 'shrink');
-            else
-                w1_mov = nan(nTrans, numel(tind));
-            end
-            if size(gicTrans,2) >= 2
-                gicW2 = squeeze(gicTrans(:,2,:)); % [nTrans x nTime]
-                w2_mov = movmean(abs(gicW2), wSamp, 2, 'Endpoints', 'shrink');
-            else
-                w2_mov = nan(nTrans, numel(tind));
-            end
-        else
-            w1_mov = nan(nTrans, numel(tind));
-            w2_mov = nan(nTrans, numel(tind));
-        end
-
-
-        % -----------------------------
-        % Store event info
-        % -----------------------------
-        results.events(i).file            = fileNames{i};
-        results.events(i).label           = string(baseName);
-        results.events(i).tStartFile      = tStartName;
-        results.events(i).tEndFile        = tEndName;
-        results.events(i).tStartSim       = timeVec(1);
-        results.events(i).tEndSim         = timeVec(end);
-        results.events(i).nSamples        = numel(timeVec);
-        results.events(i).winSamples15    = wSamp;
-        results.events(i).sub_max15       = sub_max15;
-        results.events(i).line_max15      = line_max15;
-        results.events(i).trans_max15_w1  = trans_max15_w1;
-        results.events(i).trans_max15_w2  = trans_max15_w2;
-        results.events(i).line_movmean15 = line_mov;
-        results.events(i).trans_movmean15_w1 = w1_mov;
-        results.events(i).trans_movmean15_w2 = w2_mov;
-
-
     end
 
-    % ---------------------------------------------------------------------
-    % Save substation matrix (used for heatmap plot)
-    % ---------------------------------------------------------------------
-    results.matrix.sub_max15_byEvent = subMat;
 
-    % ---------------------------------------------------------------------
-    % Aggregate: Substations
-    % ---------------------------------------------------------------------
-    results.aggregate.sub.median15 = median(subMat, 2);
-    results.aggregate.sub.mean15   = mean(subMat,   2);
-    results.aggregate.sub.max15    = max(subMat,    [], 2);
-    results.aggregate.sub.nEvents  = sum(~isnan(subMat), 2);
-    results.rank_sub = computeMedianRankAcrossEvents(subMat);
-
-    % ---------------------------------------------------------------------
-    % Save to MAT-file
-    % ---------------------------------------------------------------------
-    ts      = datestr(now, 'yyyymmdd_HHMMSS');
-    outName = sprintf('storm_results_%s.mat', ts);
-    save(outName, 'results', '-v7.3');
-
-
-    results.lineMat= lineMat;
-    results.transMat_w1 = transMat_w1;
-    results.transMat_w2 = transMat_w2;
-    % ---------------------------------------------------------------------
-    % Summary plots — pass everything the plot function needs
-    % ---------------------------------------------------------------------
-    makeStormSummaryPlots(results);
+    eventsUsed{end+1} = fileNames{ei}; 
 end
 
-% =========================================================================
-% Window length in samples from datetime vector
-% =========================================================================
+% Compute sums, ranks and assemble tables
+sum_and_rank = @(C, names) build_rank_table(C, names);
+
+results.samples.sub = subSamples;
+results.samples.line = lineSamples;
+results.samples.trans = transSamples;
+results.eventsUsed = eventsUsed;
+
+results.rank.sub   = sum_and_rank(subSamples, subNames);
+results.rank.line  = sum_and_rank(lineSamples, lineNames);
+results.rank.trans = sum_and_rank(transSamples, transNames);
+
+% Save compact MAT for later use
+ts = datestr(now, 'yyyymmdd_HHMMSS');
+outName = sprintf('storm_results_compact_%s.mat', ts);
+save(outName, 'results', '-v7.3');
+rankByLinesandTrans(app, results);
+
+
+% Plot boxplots for top-20 by rank
+Nplot = 20;
+plot_top_box(results.rank.line,  Nplot, lineSamples,  lineNames,  'Top-20 Lines (15-min samples) from top stormes');
+plot_top_box(results.rank.sub,   Nplot, subSamples,   subNames,   'Top-20 Substations (15-min samples) from top storms');
+plot_top_box(results.rank.trans, Nplot, transSamples, transNames, 'Top-20 Transformers (15-min samples) from top storms');
+
+end
+
+%% Helper: produce moving-mean of abs and return cell of column samples for X [nSites x nTime] or vector
+function cellsOut = split_movmean_abs(X, wSamp)
+    if isempty(X)
+        cellsOut = {};
+        return;
+    end
+    if isvector(X)
+        A = abs(X(:).');
+        M = movmean(A, wSamp, 2, 'Endpoints','shrink');
+        cellsOut = {M(:)}; % single cell
+        return;
+    end
+    A = abs(X);
+    M = movmean(A, wSamp, 2, 'Endpoints','shrink'); % same shape
+    % return cell per row (site)
+    cellsOut = cell(size(M,1),1);
+    for r = 1:size(M,1)
+        cellsOut{r} = M(r,:).';
+    end
+end
+
+function T = build_rank_table(cellSamples, names)
+% Builds a rank table. Behaves exactly like the original single-field version
+% when each cell is a numeric vector. If each cell is an Nx1 struct with two
+% fields (e.g. w1 and w2) the function returns Nsamples plus two Sum and
+% two Rank columns (one per field).
+    n = numel(cellSamples);
+    sums = nan(n,1);
+    % Single-field 
+    if ~isstruct(cellSamples)
+        nsamps = zeros(n,1);
+        for i = 1:n
+            v = cellSamples{i};
+            if isempty(v)
+                sums(i) = NaN;
+                nsamps(i) = 0;
+            else
+                sums(i) = sum(v,'omitnan');
+                nsamps(i) = numel(v);
+            end
+        end
+        [~, ord] = sort(sums, 'descend', 'MissingPlacement','last');
+        rankIdx = nan(n,1);
+        rankIdx(ord(~isnan(sums(ord)))) = 1:sum(~isnan(sums));
+        T = table(names(:), sums, nsamps, rankIdx, ...
+            'VariableNames', {'Name','Sum','Nsamples','Rank'});
+    else
+        fn = fieldnames(cellSamples);
+        if numel(fn) ~= 2
+            error('When using structs, expected exactly 2 fields per cell.');
+        end
+        f1 = fn{1}; f2 = fn{2};
+        sums = NaN(1,n);
+        ns1   = zeros(n,1);
+        ns2   = zeros(n,1);
+    
+        for i = 1:n
+            v = cellSamples(i);
+            if isempty(v)
+                sums1 = NaN; sums2 = NaN;
+            else
+                if isfield(v, f1) && ~isempty(v.(f1))
+                    a = v.(f1);
+                    sums1 = sum(a, 'omitnan');
+                    ns1(i) = numel(a);              % or nnz(~isnan(a)) for non-NaN count
+                else
+                    sums1 = NaN; ns1(i) = 0;
+                end
+        
+                if isfield(v, f2) && ~isempty(v.(f2))
+                    b = v.(f2);
+                    sums2 = sum(b, 'omitnan');
+                    ns2(i) = numel(b);              % or nnz(~isnan(b))
+                else
+                    sums2 = NaN; ns2(i) = 0;
+                end
+            end
+            sums(i) = max(sums1, sums2);
+        end
+        sums = sums(:);
+
+        % rank based on combined Sum
+        rankIdx = nan(n,1);
+        [~, ord] = sort(sums, 'descend', 'MissingPlacement','last');
+        valid = ~isnan(sums);
+        rankIdx(ord(valid(ord))) = 1:sum(valid);
+    
+        T = table(names(:), sums, ns1, rankIdx, ...
+            'VariableNames', {'Name','Sum', 'Nsamples','Rank'});
+    end
+end
+
+
+
+%% Helper: plot top-k (violin) given rank table and samples
+function plot_top_box(rankTable, K, samplesCell, names, figTitle)
+
+    if isempty(rankTable)
+        return;
+    end
+
+    valid = ~isnan(rankTable.Sum);
+    ranked = sortrows(rankTable(valid,:), 'Rank', 'ascend');
+
+    K = min(K,height(ranked));
+    if K == 0
+        return;
+    end
+
+    topNames = ranked.Name(1:K);
+    idx = arrayfun(@(s)find(names==s,1),topNames);
+
+    % Build long-form data and group labels
+    Y = [];
+    G = categorical();
+
+    for k = 1:K
+        vals = samplesCell{idx(k)}(:);
+
+        Y = [Y; vals];
+
+        G = [G;
+             categorical( ...
+                 repmat(string(topNames(k)),length(vals),1), ...
+                 string(topNames), ...
+                 string(topNames))];
+    end
+
+    figure('Name',figTitle);
+
+    vp = violinplot(G,Y,...
+        DensityWidth=0.8,...
+        DensityScale="width");
+
+    % Make all violins the same color
+    blue = [0 0.4470 0.7410];
+
+    for k = 1:numel(vp)
+        vp(k).FaceColor = blue;
+    end
+
+    title(figTitle)
+    ylabel('15-min mean |GIC|')
+
+    % Optional for GIC data
+    % set(gca,'YScale','log')
+
+    xtickangle(45)
+    grid on
+
+end
+
+%% Helper: window length in samples from datetime vector
 function wSamp = windowSamplesFromDatetime(timeVec, winDur)
     if numel(timeVec) < 2
-        wSamp = 1;
-        return;
+        wSamp = 1; return;
     end
     dt = seconds(diff(timeVec));
-    dt = dt(isfinite(dt) & dt > 0);
-    if isempty(dt)
-        wSamp = 1;
-        return;
-    end
+    dt = dt(isfinite(dt) & dt>0);
+    if isempty(dt), wSamp = 1; return; end
     dt_med = median(dt);
-    wSamp  = max(1, round(seconds(winDur)/dt_med));
+    wSamp = max(1, round(seconds(winDur)/dt_med));
 end
 
-% =========================================================================
-% Max moving mean of abs for [nSites x nTime]
-% =========================================================================
-function out = maxMovMeanAbs_2D(X, wSamp)
-    A = abs(X);
-    M = movmean(A, wSamp, 2, 'Endpoints','shrink');
-    out = max(M, [], 2);
-    out = out(:);
-end
-
-% =========================================================================
-% Parse start/end times from filename
-% =========================================================================
-function [tStart, tEnd] = parseEventTimesFromFileName(baseName)
-    tStart = NaT; tEnd = NaT;
-    expr = "from\s+(\d{2}-[A-Za-z]{3}-\d{4}\s+\d{2}/\d{2}/\d{2})\s+to\s+(\d{2}-[A-Za-z]{3}-\d{4}\s+\d{2}/\d{2}/\d{2})";
-    tok  = regexp(baseName, expr, 'tokens', 'once');
-    if isempty(tok) || numel(tok) < 2
-        return;
+function out = conditional_split(X, wSamp)
+    if isempty(X)
+        out = {};
+    else
+        out = split_movmean_abs(X, wSamp);
     end
-    s1 = strrep(tok{1}, '/', ':');
-    s2 = strrep(tok{2}, '/', ':');
-    try
-        tStart = datetime(s1, 'InputFormat','dd-MMM-yyyy HH:mm:ss');
-        tEnd   = datetime(s2, 'InputFormat','dd-MMM-yyyy HH:mm:ss');
-    catch
-        tStart = NaT;
-        tEnd   = NaT;
-    end
-end
-
-% =========================================================================
-% Median rank across events
-% =========================================================================
-function rankOut = computeMedianRankAcrossEvents(Mat)
-    [nSubs, nEvents] = size(Mat);
-    rankMat = nan(nSubs, nEvents);
-    for e = 1:nEvents
-        x = Mat(:,e);
-        if all(isnan(x)), continue; end
-        [~, order] = sort(x, 'descend', 'MissingPlacement','last');
-        r = nan(nSubs,1);
-        r(order) = (1:nSubs).';
-        rankMat(:,e) = r;
-    end
-    rankOut.rankMat    = rankMat;
-    rankOut.medianRank = median(rankMat, 2);
-    rankOut.meanRank   = mean(rankMat,   2);
-end
-
-% =========================================================================
-% Summary plots
-% =========================================================================
-function makeStormSummaryPlots(results)
-    subMat      = results.matrix.sub_max15_byEvent;
-    lineMat     = results.lineMat;
-    transMat_w1 = results.transMat_w1;
-    transMat_w2 = results.transMat_w2;
-    subNames    = results.sub.Name;
-    lineNames   = results.line.Name;
-    transNames  = results.trans.Name;
-
-    nEvents = size(subMat, 2);
-    eventLabels = strings(nEvents, 1);
-    for i = 1:numel(results.events)
-        eventLabels(i) = results.events(i).label;
-    end
-
-    % Drop entirely-NaN events
-    validEvent      = ~all(isnan(lineMat), 1);
-    subMatV         = subMat(:, validEvent);
-    lineMatV        = lineMat(:, validEvent);
-    transMatV_w1    = transMat_w1(:, validEvent);
-    transMatV_w2    = transMat_w2(:, validEvent);
-    eventLabelsV    = eventLabels(validEvent);
-
-    if isempty(subMatV)
-        warning('No valid events to plot.');
-        return;
-    end
-
-    % -----------------------------------------------------------------------
-    % Plot 1: Heatmap (Substations x Events)
-    % -----------------------------------------------------------------------
-    figure('Name','GIC Hotspots Heatmap (Max 15-min Mean |GIC|)');
-    imagesc(subMatV);
-    colorbar;
-    xlabel('Event');
-    ylabel('Substation Index');
-    title('Heatmap: Max 15-min Mean |GIC| per Substation per Event');
-    set(gca,'XTick',1:numel(eventLabelsV),'XTickLabel',eventLabelsV);
-    xtickangle(45);
-
-    % -----------------------------------------------------------------------
-    % Plot 2: Bar — Top-N substations by median across events
-    % -----------------------------------------------------------------------
-    med15 = results.aggregate.sub.median15;
-    [~, idxSort] = sort(med15, 'descend', 'MissingPlacement','last');
-    N      = min(20, numel(idxSort));
-    topIdx = idxSort(1:N);
-
-    figure('Name','Top Hotspot Substations (Median across Events)');
-    bar(med15(topIdx));
-    grid on;
-    ylabel('Median of Event Max 15-min Mean |GIC|');
-    title(sprintf('Top %d Substations by Persistent Hotspot Score (Median)', N));
-    set(gca,'XTick',1:N,'XTickLabel',subNames(topIdx));
-    xtickangle(45);
-
-    % -----------------------------------------------------------------------
-    % Plot 3: Box/Whisker — Top-N substations across events
-    % -----------------------------------------------------------------------
-    figure('Name','Distribution across Storms — Top Substations');
-    boxplot(subMatV(topIdx,:).', 'Labels', cellstr(subNames(topIdx)));
-    grid on;
-    ylabel('Event Max 15-min Mean |GIC|');
-    title(sprintf('Across-Storm Distribution for Top %d Substations', N));
-    xtickangle(45);
-
-    % -----------------------------------------------------------------------
-    % Plot 4: Box/Whisker — Top 20 Lines + Transformers (W1/W2 combined)
-    % -----------------------------------------------------------------------
-    combTransV   = max(transMatV_w1, transMatV_w2);  % elementwise max of windings
-    combinedMat  = [lineMatV; combTransV];
-    combinedNames = [lineNames; transNames];
-
-    medCombined = median(combinedMat, 2, 'omitnan');
-    [~, idxComb] = sort(medCombined, 'descend', 'MissingPlacement','last');
-    NC      = min(20, numel(idxComb));
-    topComb = idxComb(1:NC);
-
-    figure('Name','Top 20 Lines + Transformers — Distribution across Storms');
-    boxplot(combinedMat(topComb,:).', 'Labels', cellstr(combinedNames(topComb)));
-    grid on;
-    ylabel('Event Max 15-min Mean |GIC|');
-    title(sprintf('Top %d Lines and Transformers by Median Event Value', NC));
-    xtickangle(45);
-
-    % -----------------------------------------------------------------------
-    % Plot 5: Rank-consistency — Top 30 substations
-    % -----------------------------------------------------------------------
-    medRank = results.rank_sub.medianRank;
-    [~, idxRankSort] = sort(medRank, 'ascend', 'MissingPlacement','last');
-    Nr = min(30, numel(idxRankSort));
-
-    figure('Name','Rank Consistency — Substations (Median Rank across Events)');
-    bar(medRank(idxRankSort(1:Nr)));
-    grid on;
-    ylabel('Median Rank (Lower = more consistently high)');
-    title(sprintf('Top %d Consistent Hotspots by Median Rank', Nr));
-    set(gca,'XTick',1:Nr,'XTickLabel',subNames(idxRankSort(1:Nr)));
-    xtickangle(45);
 end

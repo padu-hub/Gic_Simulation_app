@@ -7,7 +7,16 @@ function plotGICMitigationResults(results)
 % 2) Max transformer GIC as a wide background bar on the right y-axis
 % 3) Max line GIC as a narrower overlapping bar on the right y-axis
 
-
+% % Save results to a .mat file with timestamp
+% timestamp = datestr(now, 'yyyymmdd_HHMMSS');
+% saveFilename = sprintf('GICResults_%s.mat', timestamp);
+% try
+%     save(saveFilename, 'results');
+% catch
+%     % Fallback: save to current folder with generic name
+%     warning('Failed to save to %s. Saving to GICResults.mat instead.', saveFilename);
+%     save('GICResults.mat', 'results');
+% end
 figure;
 nSteps  = numel(results.sumGICSubs);
 x       = 0:(nSteps-1);   % 0 = baseline
@@ -31,6 +40,10 @@ x       = 0:(nSteps-1);   % 0 = baseline
     ylabel(axBar, 'Max Transformer / Line GIC (A/phase)');
     
     xlim(axBar, [min(x)-0.5, max(x)+0.5]);
+    % set x-ticks every 20
+    xt = min(x):20:max(x);
+    axBar.XTick = xt;
+    axLine.XTick = xt;
     axBar.FontSize = 16;
     grid(axBar, 'on')
     hold(axBar, 'on')
@@ -68,6 +81,7 @@ x       = 0:(nSteps-1);   % 0 = baseline
     % Match x ticks
     axLine.XTick = axBar.XTick;
     axLine.FontSize = 16;
+
     
     % Turn off duplicate box if needed
     box(axLine, 'off')

@@ -67,7 +67,7 @@ end
 % Main loop: stop if all processed OR last max transformer < 15 A OR sumSubs < 50
 nCand = numel(idx_order);
 for k = 1:nCand
-    if maxTrans(end) < 15 || sumSubs(end) < 50
+    if maxTrans(end) < 5 || sumSubs(end) < 50
         try
             app.StatusTextArea.Value = [app.StatusTextArea.Value; "Stopping: max transformer GIC < 15 A or sumSubs < 50"];
             app.StatusTextArea.scroll('bottom');
@@ -93,7 +93,12 @@ for k = 1:nCand
             if curIdx < 1 || curIdx > nT
                 description = sprintf('Skipping invalid trans index %d', curIdx);
             else
-                widx = [curIdx, 1];
+                hv = string(app.T(curIdx).HV_Type);
+                if contains(lower(hv), 'wye') % wye-wye, %wye-delta
+                    widx = [curIdx, 1];
+                elseif contains(lower(hv), 'auto')
+                    widx = [curIdx, 2];
+                end
                 [app, lineOpen, windingBlocked, description] = ...
                     applyMitigationToNetwork(app, 'winding', widx, lineOpen, windingBlocked);
                 transOpen(curIdx) = true;

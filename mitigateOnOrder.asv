@@ -1,16 +1,36 @@
 function results = mitigateOnOrder(app, idx_sorted)
-% Run mitigations in the provided order until all entries processed or
-% max transformer GIC < 5 A. Return per-step mitigation description,
-% total substation sum, max line value+name, max transformer value+name, and plot.
+% Run mitigations in provided order (lines and transformers). Accepts:
+% - numeric vector of line indices (legacy)
+% - struct with fields .order (indices) and .type ("Line"/"Trans") for combo
 %
-% idx_sorted: numeric vector of line indices into app.L in the exact order
-%             to apply mitigations (e.g. [12,5,3,20]). Duplicates allowed.
+% Mitigation for lines uses type 'line'.
+% Mitigation for transformers uses type 'winding' and blocks W1 (HV) for the
+% matching transformer index.
 
 if nargin < 2
     error('Requires app and idx_sorted');
 end
-idx_sorted = idx_sorted(:);
-lineOpen       = false(numel(idx_sorted), 1);
+
+% Normalize idx_sorted and type
+if isstruct(idx_sorted) && isfield(idx_sorted,'order') && isfield(idx_sorted,'type')
+    idx_order = idx_sorted.order(:);
+    Type = string(idx_sorted.type(:));
+    if numel(Type) ~= numel(idx_order)
+        error('idx_sorted.order and idx_sorted.type must be same length');
+    end
+else
+    % legacy: all entries are lines
+    idx_order = idx_sorted(:);
+    Type = repmat("Line", numel(idx_order), 1);
+end
+
+nL = numel(app.L);
+nT = numel(app.T);
+
+% Track opens / blocked windings
+lineOpen = false(nL,1);
+transOpen = false(nT,1);         % marker if transformer had mitigation applied
+windingBlocked = false(nT,2);    % [trans, winding]
 
 % Baseline simulation
 app.gic_originalS=[]; app.gic_originalL=[]; app.gic_originalT=[];
@@ -20,7 +40,7 @@ GICbase.Lines = GICbase.Original_Lines;
 GICbase.Trans = GICbase.Original_Trans;
 [sumN0, maxTN0, maxTName0, maxLN0, maxLName0] = extractMetrics(app, GICbase);
 
-% Prepare storage (only requested)
+% Prepare storage
 mitSteps      = {}; % description per step (including "Baseline")
 sumSubs       = [];
 maxTrans      = [];
@@ -44,32 +64,55 @@ try
 catch
 end
 
-% Main loop: stop if all processed OR last max transformer < 5 A
-% nCand = numel(idx_sorted);
-for k = 1:
+% Main loop: stop if all processed OR last max transformer < 15 A OR sumSubs < 50
+nCand = numel(idx_order);
+for k = 1:nCand
     if maxTrans(end) < 15 || sumSubs(end) < 50
         try
-            app.StatusTextArea.Value = [app.StatusTextArea.Value; "Stopping: max transformer GIC < 5 A"];
+            app.StatusTextArea.Value = [app.StatusTextArea.Value; "Stopping: max transformer GIC < 15 A or sumSubs < 50"];
             app.StatusTextArea.scroll('bottom');
             drawnow limitrate;
         catch
         end
         break;
     end
-    if k == 28
-        x=1;
-    end
-    lineIdx = idx_sorted(k);
 
-    % apply mitigation (no winding/blocking arguments)
-    [app, lineOpen,~, description] = ...
-            applyMitigationToNetwork(app, 'line', lineIdx, lineOpen,0);
+    curIdx = idx_order(k);
+    curType = Type(k);
+
+    switch lower(curType)
+        case "line"
+            if curIdx < 1 || curIdx > nL
+                description = sprintf('Skipping invalid line index %d', curIdx);
+            else
+                [app, lineOpen, ~, description] = ...
+                    applyMitigationToNetwork(app, 'line', curIdx, lineOpen, windingBlocked);
+            end
+
+        case "trans"
+            if curIdx < 1 || curIdx > nT
+                description = sprintf('Skipping invalid trans index %d', curIdx);
+            else
+                hv = string(app.T(curIdx).HV_Type);
+                if (contains(lower(hv), 'wye')
+                    transScore(idx) = rt_scores(k);
+                end
+             
+                widx = [curIdx, 1];
+                [app, lineOpen, windingBlocked, description] = ...
+                    applyMitigationToNetwork(app, 'winding', widx, lineOpen, windingBlocked);
+                transOpen(curIdx) = true;
+            end
+
+        otherwise
+            description = sprintf('Unknown type "%s" for index %d - skipped', curType, curIdx);
+    end
 
     % re-run sim and extract metrics
     [~, ~, ~, GIC_current] = runGIC_now(app);
     [sumN, maxTN, maxTNameN, maxLN, maxLNameN] = extractMetrics(app, GIC_current);
 
-    % store only requested outputs
+    % store step results
     mitSteps{end+1}     = string(description);
     sumSubs(end+1)      = sumN;
     maxTrans(end+1)     = maxTN;
@@ -78,13 +121,14 @@ for k = 1:
     maxLineName{end+1}  = maxLNameN;
 
     % UI log per step
-    stepMsg = sprintf('Applied: %s | TotalSubSum=%.2f | MaxTrans=%.2f [%s] | MaxLine=%.2f [%s]', ...
-        char(description), sumN, maxTN, char(maxTNameN), maxLN, char(maxLNameN));
-    app.StatusTextArea.Value = [app.StatusTextArea.Value; string(description); stepMsg];
-    app.StatusTextArea.scroll('bottom');
-    drawnow limitrate;
-
-
+    try
+        stepMsg = sprintf('Applied: %s | TotalSubSum=%.2f | MaxTrans=%.2f [%s] | MaxLine=%.2f [%s]', ...
+            char(description), sumN, maxTN, char(maxTNameN), maxLN, char(maxLNameN));
+        app.StatusTextArea.Value = [app.StatusTextArea.Value; string(description); stepMsg];
+        app.StatusTextArea.scroll('bottom');
+        drawnow limitrate;
+    catch
+    end
 end
 
 % Package minimal results
@@ -94,39 +138,27 @@ results.maxTransGIC     = maxTrans(:);
 results.maxTransName    = maxTransName(:);
 results.maxLinesGIC     = maxLine(:);
 results.maxLineName     = maxLineName(:);
-results.idx_sorted      = idx_sorted(:);
+results.idx_sorted      = struct('order', idx_order(:), 'type', Type(:));
 results.lineOpen        = lineOpen;
 results.transOpen       = transOpen;
+results.windingBlocked  = windingBlocked;
 
-% % Save results with title "mass mitigation" and timestamp
-% timestamp = datestr(now,'yyyy-mm-dd_HH-MM-SS');
-% fname = sprintf('mass_mitigation_%s.mat', timestamp);
-% save(fname, 'results');
-% try
-%     app.StatusTextArea.Value = [app.StatusTextArea.Value; ...
-%         sprintf('Results saved: %s', fname)];
-%     app.StatusTextArea.scroll('bottom');
-%     drawnow limitrate;
-% catch
-% end
-%plotGICMitigationResults(results)
+% restore original network objects
 app.L = app.OriginalL;
 app.T = app.OriginalT;
 end
 
-%% Helper: simplified metrics extractor (no winding detail)
+%% Helper: simplified metrics extractor (unchanged)
 function [sumVal, maxT, maxTName, maxL, maxLName] = extractMetrics(app, GIC)
-    % Total substation GIC: sum absolute per time then max across time
     if isfield(GIC, 'Subs') && ~isempty(GIC.Subs)
         subsAbs = abs(GIC.Subs);
-        totPerT = sum(subsAbs, 1, 'omitnan'); % sum across substations -> time series
+        totPerT = sum(subsAbs, 1, 'omitnan');
         sumVal  = max(totPerT, [], 'omitnan');
         if isempty(sumVal) || isnan(sumVal), sumVal = 0; end
     else
         sumVal = 0;
     end
 
-    % Max transformer
     if isfield(GIC, 'Trans') && ~isempty(GIC.Trans)
         trAbs = abs(GIC.Trans);
         [maxT, linIdx] = max(trAbs(:), [], 'omitnan');
@@ -144,7 +176,6 @@ function [sumVal, maxT, maxTName, maxL, maxLName] = extractMetrics(app, GIC)
         maxT = 0; maxTName = "None";
     end
 
-    % Max line
     if isfield(GIC, 'Lines') && ~isempty(GIC.Lines)
         lnAbs = abs(GIC.Lines);
         [maxL, linIdxL] = max(lnAbs(:), [], 'omitnan');

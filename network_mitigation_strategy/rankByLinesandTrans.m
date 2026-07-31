@@ -25,28 +25,11 @@ if isfield(results,'rank') && isfield(results.rank,'trans') && ~isempty(results.
     rt = results.rank.trans; % expected 305x4 table or cell
     % names in column 1, scores in column 2
     if istable(rt)
-        rt_names = rt{:,1};
-        rt_scores = rt{:,2};
+        transScore = rt{:,2};
     else
-        rt_names = rt(:,1);
-        rt_scores = cell2mat(rt(:,2));
+        transScore = cell2mat(rt(:,2));
     end
-    % normalize to string array for robust matching
-    rt_names = string(rt_names);
-    appTnames = string({app.T.Name}'); % column vector
-    % find matching transformers and check HV_Type for 'wye' or 'auto'
-    for k = 1:numel(rt_names)
-        name = rt_names(k);
-        if strlength(name)==0, continue; end
-        idx = find(appTnames == name, 1);
-        if isempty(idx), continue; end
-        hv = string(app.T(idx).HV_Type);
-        lv = string(app.T(idx).LV_Type);
-        if (contains(lower(hv), 'wye') || contains(lower(hv), 'auto'))...
-                && (contains(lower(lv), 'wye') || contains(lower(lv), 'auto'))
-            transScore(idx) = rt_scores(k);
-        end
-    end
+
 end
 
 allIdx = [lineIdxAll; transIdxAll];

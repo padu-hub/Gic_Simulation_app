@@ -130,6 +130,8 @@ results.rank.trans = sum_and_rank(transSamples, transNames);
 ts = datestr(now, 'yyyymmdd_HHMMSS');
 outName = sprintf('storm_results_compact_%s.mat', ts);
 save(outName, 'results', '-v7.3');
+rankByLinesandTrans(app, results);
+
 
 % Plot boxplots for top-20 by rank
 Nplot = 20;
@@ -160,27 +162,78 @@ function cellsOut = split_movmean_abs(X, wSamp)
     end
 end
 
-%% Helper: build rank table from cell samples
 function T = build_rank_table(cellSamples, names)
+% Builds a rank table. Behaves exactly like the original single-field version
+% when each cell is a numeric vector. If each cell is an Nx1 struct with two
+% fields (e.g. w1 and w2) the function returns Nsamples plus two Sum and
+% two Rank columns (one per field).
     n = numel(cellSamples);
     sums = nan(n,1);
-    nsamps = zeros(n,1);
-    for i = 1:n
-        v = cellSamples{i};
-        if isempty(v)
-            sums(i) = NaN;
-            nsamps(i) = 0;
-        else
-            sums(i) = sum(v, 'omitnan');
-            nsamps(i) = numel(v);
+    % Single-field 
+    if ~isstruct(cellSamples)
+        nsamps = zeros(n,1);
+        for i = 1:n
+            v = cellSamples{i};
+            if isempty(v)
+                sums(i) = NaN;
+                nsamps(i) = 0;
+            else
+                sums(i) = sum(v,'omitnan');
+                nsamps(i) = numel(v);
+            end
         end
+        [~, ord] = sort(sums, 'descend', 'MissingPlacement','last');
+        rankIdx = nan(n,1);
+        rankIdx(ord(~isnan(sums(ord)))) = 1:sum(~isnan(sums));
+        T = table(names(:), sums, nsamps, rankIdx, ...
+            'VariableNames', {'Name','Sum','Nsamples','Rank'});
+    else
+        fn = fieldnames(cellSamples);
+        if numel(fn) ~= 2
+            error('When using structs, expected exactly 2 fields per cell.');
+        end
+        f1 = fn{1}; f2 = fn{2};
+        sums = NaN(1,n);
+        ns1   = zeros(n,1);
+        ns2   = zeros(n,1);
+    
+        for i = 1:n
+            v = cellSamples(i);
+            if isempty(v)
+                sums1 = NaN; sums2 = NaN;
+            else
+                if isfield(v, f1) && ~isempty(v.(f1))
+                    a = v.(f1);
+                    sums1 = sum(a, 'omitnan');
+                    ns1(i) = numel(a);              % or nnz(~isnan(a)) for non-NaN count
+                else
+                    sums1 = NaN; ns1(i) = 0;
+                end
+        
+                if isfield(v, f2) && ~isempty(v.(f2))
+                    b = v.(f2);
+                    sums2 = sum(b, 'omitnan');
+                    ns2(i) = numel(b);              % or nnz(~isnan(b))
+                else
+                    sums2 = NaN; ns2(i) = 0;
+                end
+            end
+            sums(i) = max(sums1, sums2);
+        end
+        sums = sums(:);
+
+        % rank based on combined Sum
+        rankIdx = nan(n,1);
+        [~, ord] = sort(sums, 'descend', 'MissingPlacement','last');
+        valid = ~isnan(sums);
+        rankIdx(ord(valid(ord))) = 1:sum(valid);
+    
+        T = table(names(:), sums, ns1, rankIdx, ...
+            'VariableNames', {'Name','Sum', 'Nsamples','Rank'});
     end
-    [~, ord] = sort(sums, 'descend', 'MissingPlacement','last');
-    rankIdx = nan(n,1);
-    rankIdx(ord(~isnan(sums(ord)))) = 1:sum(~isnan(sums));
-    T = table(names(:), sums, nsamps, rankIdx, ...
-        'VariableNames', {'Name','Sum','Nsamples','Rank'});
 end
+
+
 
 %% Helper: plot top-k (violin) given rank table and samples
 function plot_top_box(rankTable, K, samplesCell, names, figTitle)

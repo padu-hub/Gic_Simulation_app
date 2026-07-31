@@ -285,23 +285,9 @@ results.parallelGroups = parallelGroups;
 results.modeStr        = modeStr;
 
 %% Save results and plot
-save('mitigation_results.mat', ...
-    'mitigations', 'sumGICSubs', 'maxTransGIC', 'maxLinesGIC', ...
-    'maxTransName', 'maxLineName');
-
-save('mitigation_results_full.mat', 'results')
+save('mitigation_results.mat', 'results')
 plotGICMitigationResults(results);
 
-% Save results using modeStr in filename 
-safeModeStr = regexprep(string(modeStr), '[^A-Za-z0-9_\-]', '_');
-fname = sprintf('mitigation_results_%s.mat', char(safeModeStr));
-fullfileSave = fullfile(pwd, fname);
-save(fullfileSave, 'mitigations', 'sumGICSubs', 'maxTransGIC', 'maxLinesGIC', ...
-    'maxTransName', 'maxLineName', 'results');
-app.StatusTextArea.Value = [app.StatusTextArea.Value; ...
-    sprintf('Saved results to %s', fullfileSave)];
-app.StatusTextArea.scroll('bottom');
-drawnow limitrate;
 
 
 
@@ -334,18 +320,21 @@ drawnow limitrate;
         sumVal  = max(totPerT, [], 'omitnan');
 
         % Max transformer winding GIC
-        if isfield(GIC, 'Trans') && ~isempty(GIC.Trans)
-            transAbs       = abs(GIC.Trans);
+        if isfield(GIC, 'Trans') && ~isempty(GIC.Trans)                   
+            % GIC.Trans is Nx2xM: choose larger winding per transformer -> transAbs is NxM
+            transAbs = squeeze(max(abs(GIC.Trans), [], 2));  % result: N x M (be careful if N==1 or M==1)
+           
             [maxT, linIdx] = max(transAbs, [], 'all', 'omitnan');
-
+            
             if isempty(maxT) || isnan(maxT)
-                maxT = 0; maxTName = "None";
+                maxT = 0;
+                maxTName = "None";
             else
-                [tIdx, wIdx] = ind2sub(size(transAbs), linIdx);
+                [tIdx, ~] = ind2sub(size(transAbs), linIdx);  % tIdx = transformer row
                 if isfield(app.T(tIdx), 'Name')
-                    maxTName = string(app.T(tIdx).Name) + " (W" + wIdx + ")";
+                    maxTName = string(app.T(tIdx).Name);
                 else
-                    maxTName = "Transformer " + tIdx + " (W" + wIdx + ")";
+                    maxTName = "Transformer " + tIdx;
                 end
             end
         else

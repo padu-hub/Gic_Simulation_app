@@ -19,7 +19,7 @@ function [app, lineOpen, windingBlocked, desc] = ...
             windingBlocked(k,w) = true;
 
             if w == 1 %wye
-                if isfield(app.T,'W1') && isfield(app.T,'W2')
+                if isfield(app.T,'W1')
                     app.T(k).W1 = 100000000000;
                     app.T(k).W2 = 100000000000;
                 end
