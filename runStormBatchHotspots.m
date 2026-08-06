@@ -29,7 +29,12 @@ transNames = string({T.Name}).';
 % Initialize cell arrays to collect 15-min-windowed mean absolute samples
 subSamples  = cell(nSubs,1);
 lineSamples = cell(nLines,1);
-transSamples = cell(nTrans,2);
+transSamples = cell(nTrans);
+
+subDirSamples  = cell(nSubs,1);
+lineDirSamples = cell(nLines,1);
+transDirSamples = repmat(struct('w1',[],'w2',[]), nTrans, 1);
+
 
 eventsUsed = {};
 
@@ -59,6 +64,8 @@ for ei = 1:nEvents
     % Determine window length (samples) for 15 minutes for this event
     wSamp = windowSamplesFromDatetime(timeVec, minutes(15));
 
+    movmean_signed_nonzero = @(X) split_movmean_signed_nonzero(X, wSamp);
+
     % Helper to compute moving-mean of abs and return column-wise time samples
     movmean_abs_samples = @(X) conditional_split(X, wSamp);
 
@@ -68,6 +75,10 @@ for ei = 1:nEvents
         for k = 1:numel(Ssamples)
             subSamples{k} = [subSamples{k}; Ssamples{k}];
         end
+        Sdir = movmean_signed_nonzero(gicSubs); % cell: one cell per site (column)
+        for k = 1:numel(Sdir)
+            subDirSamples{k} = [subDirSamples{k}; Sdir{k}];
+        end
     end
 
     % Lines
@@ -76,42 +87,86 @@ for ei = 1:nEvents
         for k = 1:numel(Lsamples)
             lineSamples{k} = [lineSamples{k}; Lsamples{k}]; 
         end
+        Ldir = movmean_signed_nonzero(gicLine);
+        for k = 1:numel(Ldir)
+            lineDirSamples{k} = [lineDirSamples{k}; Ldir{k}];
+        end
     end
+
+
 
     % Initialize transSamples as cell or struct array beforehand:
     nT = size(gicTrans,1);
     transSamples = repmat(struct('w1',[],'w2',[]), nT, 1); % for exactly 2 windings
     
-    % Populate per transformer/winding( w1 and w2)
+    % Populate per transformer/winding (w1 and w2) and collect signed
     if ndims(gicTrans) == 3
         nW = size(gicTrans,2);
         for ti = 1:nT
             for w = 1:nW
                 wvec = squeeze(gicTrans(ti,w,:)).';
                 if isempty(wvec), continue; end
+                % absolute samples (existing)
                 s = split_movmean_abs(wvec, wSamp);
                 if iscell(s), s = s{1}; end
     
-                switch w
-                    case 1
-                        if isempty(transSamples(ti).w1)
-                            transSamples(ti).w1 = s;
-                        else
-                            transSamples(ti).w1 = [transSamples(ti).w1; s];
-                        end
-                    otherwise
-                        if isempty(transSamples(ti).w2)
-                            transSamples(ti).w2 = s;
-                        else
-                            transSamples(ti).w2 = [transSamples(ti).w2; s];
-                        end
+                % signed non-zero samples (new)
+                sd = split_movmean_signed_nonzero(wvec, wSamp);
+                if iscell(sd), sd = sd{1}; end
+    
+                if w == 1
+                    if isempty(transSamples(ti).w1)
+                        transSamples(ti).w1 = s;
+                    else
+                        transSamples(ti).w1 = [transSamples(ti).w1; s];
+                    end
+                    if isempty(transDirSamples(ti).w1)
+                        transDirSamples(ti).w1 = sd;
+                    else
+                        transDirSamples(ti).w1 = [transDirSamples(ti).w1; sd];
+                    end
+                else
+                    if isempty(transSamples(ti).w2)
+                        transSamples(ti).w2 = s;
+                    else
+                        transSamples(ti).w2 = [transSamples(ti).w2; s];
+                    end
+                    if isempty(transDirSamples(ti).w2)
+                        transDirSamples(ti).w2 = sd;
+                    else
+                        transDirSamples(ti).w2 = [transDirSamples(ti).w2; sd];
+                    end
                 end
             end
         end
     end
 
-
     eventsUsed{end+1} = fileNames{ei}; 
+end
+% Compute directional averages (negative => source, positive => sink)
+% Substations
+avg_sub = nan(nSubs,1);
+for i=1:nSubs
+    v = subDirSamples{i};
+    if ~isempty(v), avg_sub(i) = mean(v,'omitnan'); end
+end
+
+% Lines
+avg_line = nan(nLines,1);
+for i=1:nLines
+    v = lineDirSamples{i};
+    if ~isempty(v), avg_line(i) = mean(v,'omitnan'); end
+end
+
+% Transformers (per winding)
+avg_trans = repmat(struct('w1',NaN,'w2',NaN), nTrans, 1);
+for i=1:nTrans
+    if isfield(transDirSamples,'w1') && ~isempty(transDirSamples(i).w1)
+        avg_trans(i).w1 = mean(transDirSamples(i).w1,'omitnan');
+    end
+    if isfield(transDirSamples,'w2') && ~isempty(transDirSamples(i).w2)
+        avg_trans(i).w2 = mean(transDirSamples(i).w2,'omitnan');
+    end
 end
 
 % Compute sums, ranks and assemble tables
@@ -126,11 +181,15 @@ results.rank.sub   = sum_and_rank(subSamples, subNames);
 results.rank.line  = sum_and_rank(lineSamples, lineNames);
 results.rank.trans = sum_and_rank(transSamples, transNames);
 
+results.average.sub  = avg_sub;
+results.average.line = avg_line;
+results.average.trans = avg_trans;
+
 % Save compact MAT for later use
 ts = datestr(now, 'yyyymmdd_HHMMSS');
 outName = sprintf('storm_results_compact_%s.mat', ts);
 save(outName, 'results', '-v7.3');
-rankByLinesandTrans(app, results);
+%rankByLinesandTrans(app, results);
 
 
 % Plot boxplots for top-20 by rank
@@ -310,5 +369,27 @@ function out = conditional_split(X, wSamp)
         out = {};
     else
         out = split_movmean_abs(X, wSamp);
+    end
+end
+
+% --- New helper function (place near other helpers) ---
+function cellsOut = split_movmean_signed_nonzero(X, wSamp)
+    if isempty(X)
+        cellsOut = {};
+        return;
+    end
+    if isvector(X)
+        M = movmean(X(:).', wSamp, 2, 'Endpoints','shrink'); % preserve sign
+        % remove exact zeros (active non-zero time steps)
+        M = M(M~=0);
+        cellsOut = {M(:)};
+        return;
+    end
+    M = movmean(X, wSamp, 2, 'Endpoints','shrink'); % same shape [nSites x nTime]
+    cellsOut = cell(size(M,1),1);
+    for r = 1:size(M,1)
+        row = M(r,:);
+        row = row(row~=0); % keep non-zero samples only
+        cellsOut{r} = row(:);
     end
 end

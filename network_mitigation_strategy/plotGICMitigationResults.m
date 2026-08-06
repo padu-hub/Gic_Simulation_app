@@ -3,7 +3,7 @@ function plotGICMitigationResults(results)
 % ============================================================
 % ---------- Combined Plot: Total Substation GIC + Max Transformer GIC + Max Line GIC ----------
 % ==================== COMBINED GIC PLOT ====================
-% Plot all three metrics on one figure:% 1) Total substation GIC sum as a line on the left y-axis
+% 1) Plot all three metrics on one figure:% 1) Total substation GIC sum as a line on the left y-axis
 % 2) Max transformer GIC as a wide background bar on the right y-axis
 % 3) Max line GIC as a narrower overlapping bar on the right y-axis
 

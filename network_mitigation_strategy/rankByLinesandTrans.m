@@ -1,5 +1,6 @@
 function rankByLinesandTrans(app, results)
 
+
 % Lines
 nL = numel(app.L);
 lineIdxAll = (1:nL).';
@@ -44,6 +45,5 @@ idx_sorted.order = idx_sorted_combo;
 idx_sorted.type = Type_sorted;
 results = mitigateOnOrder(app,idx_sorted);
 plotGICMitigationResults(results);
-
 
 end

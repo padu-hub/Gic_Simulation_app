@@ -143,6 +143,17 @@ results.lineOpen        = lineOpen;
 results.transOpen       = transOpen;
 results.windingBlocked  = windingBlocked;
 
+% save results with timestamp
+ts = datestr(now, 'yyyy-mm-dd_HH-MM-SS');
+fname = sprintf('massMitigationOnOrder_%s.mat', ts);
+save(fname, 'results', '-v7.3');
+try
+    app.StatusTextArea.Value = [app.StatusTextArea.Value; "Saved results to " + fname];
+    app.StatusTextArea.scroll('bottom');
+    drawnow limitrate;
+catch
+end
+
 % restore original network objects
 app.L = app.OriginalL;
 app.T = app.OriginalT;
