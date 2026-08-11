@@ -192,14 +192,24 @@ function drawBaseMapAndData(L, L_Original,L_plot, subLat, subLon, gicVals, cVals
     end
 
     
-
     % Find indices of struct elements that differ
     openIdx = find(~arrayfun(@(i) isequaln(L(i).Resistance, L_Original(i).Resistance), 1:numel(L)));
-
+    
+    % get names
+    namesL      = string({L.Name});
+    namesLplot  = string({L_plot.Name});
+    
+    % find mapping from L order to L_plot order
+    [found, idxLplot] = ismember(namesL, namesLplot);
+    if ~all(found)
+        error('Some names in L are missing in L_plot.');
+    end
+    
+    % reorder L_plot so L_plot(k) corresponds to L(k)
+    L_plot = L_plot(idxLplot);
 
     % === Transmission lines ===
     for k = 1:numel(L)
-
 
         lat = L_plot(k).Loc(:,1);
         lon = L_plot(k).Loc(:,2);
@@ -208,8 +218,9 @@ function drawBaseMapAndData(L, L_Original,L_plot, subLat, subLon, gicVals, cVals
         
         % If this line index is in openIdx, plot it grey elso continue
         % with the normal voltga color scheme.
-        if any(openIdx == k)
-            plotm(lat, lon, '-', 'Color', [0.5 0.5 0.5], 'LineWidth', 1.5);
+        %if any(openIdx == k)
+        if k == 10 || k == 11
+            continue
         else 
             if isfield(L(k), 'Voltage') && L(k).Voltage >= 400
                 lineColor = 'b';
@@ -217,6 +228,19 @@ function drawBaseMapAndData(L, L_Original,L_plot, subLat, subLon, gicVals, cVals
     
             plotm(lat, lon, '-', 'Color', lineColor, 'LineWidth', 1.5);
         end
+    end
+
+    % --- plot open (highlight) lines last so they are on top ---
+    %for k = openIdx(:)'
+    for k = 11    
+        lat = L_plot(k).Loc(:,1);
+        lon = L_plot(k).Loc(:,2);
+        if isfield(L(k), 'Voltage') && L(k).Voltage >= 400
+            lineColor = 'b';
+        end
+
+        plotm(lat, lon, '--', 'Color', lineColor, 'LineWidth', 1.5);
+        
     end
 
     % === Substation bubbles ===

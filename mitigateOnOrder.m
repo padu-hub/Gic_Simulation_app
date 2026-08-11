@@ -66,16 +66,16 @@ end
 
 % Main loop: stop if all processed OR last max transformer < 15 A OR sumSubs < 50
 nCand = numel(idx_order);
-for k = 1:nCand
-    if maxTrans(end) < 5 || sumSubs(end) < 50
-        try
-            app.StatusTextArea.Value = [app.StatusTextArea.Value; "Stopping: max transformer GIC < 15 A or sumSubs < 50"];
-            app.StatusTextArea.scroll('bottom');
-            drawnow limitrate;
-        catch
-        end
-        break;
-    end
+for k = 1:171
+    % if maxTrans(end) < 5 || sumSubs(end) < 50
+    %     try
+    %         app.StatusTextArea.Value = [app.StatusTextArea.Value; "Stopping: max transformer GIC < 15 A or sumSubs < 50"];
+    %         app.StatusTextArea.scroll('bottom');
+    %         drawnow limitrate;
+    %     catch
+    %     end
+    %     break;
+    % end
 
     curIdx = idx_order(k);
     curType = Type(k);

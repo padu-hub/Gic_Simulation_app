@@ -1,11 +1,10 @@
-%function result = weightRanking(app, results, w_lines_in, w_trans_in)
-function result = weightRanking(app, results, results_original)
+function result = weightRanking(app, results, w_lines_in, w_trans_in)
 % Rank lines and transformers into one combined list.
 % Fields: .order, .type, .score (scores in [-100,100])
 
 %Weights (edit as needed)
-w_lines = [100, 0, 100];    % [w_gic, w_doubleCircuit, w_length]
-w_trans = [100, 100];        % [w_gic, w_value]
+w_lines = [100, 0, 25];    % [w_gic, w_doubleCircuit, w_length]
+w_trans = [100, 25];        % [w_gic, w_value]
 
 % w_lines = w_lines_in;   % [w_gic, w_doubleCircuit, w_length]
 % w_trans = w_trans_in;   % [w_gic, w_value]
@@ -249,53 +248,53 @@ end
 
 
 
-% 
-% % sweep script
-% weights = 0:20:100;
-% nW = numel(weights);
-% 
-% % preallocate cell for results vectors
-% allSums = cell(nW,1);
-% maxLen = 171;
-% 
-% for k = 1:nW
-%     w_dc = weights(k);    % double-circuit weight
-%     w_len = weights(k);   % length weight
-%     w_val = weights(k);   % transformer value weight
-% 
-%     % assemble weights (gic remain 100)
-%     w_lines = [100, w_dc, w_len];    % sum maybe <= 300
-%     w_trans = [100, w_val];
-% 
-%     % call ranking that uses these weights
-%     results= weightRanking(app, topStorms, w_lines, w_trans);
-% 
-% 
-%     % collect sumGICSubs (assumed vector)
-%     s = results.sumGICSubs(:);
-%     allSums{k} = s;
-% end
-% 
-% % build common x axis 0..maxLen-1
-% x = 0:(maxLen-1);
-% 
-% % plot all series on same axes, padding/truncating as needed
-% figure; hold on;
-% cols = lines(nW);
-% leg = cell(nW,1);
-% for k = 1:nW
-%     s = allSums{k};
-%     % extend or truncate to match x length (pad with NaN so plot ignores missing)
-%     spad = NaN(size(x));
-%     m = numel(s);
-%     spad(1:m) = s;
-%     plot(x, spad, '-', 'Color', cols(k,:), 'LineWidth', 1.5);
-%     leg{k} = sprintf('w = %d', weights(k));
-% end
-% xlabel('Number of Mitigations Applied');
-% ylabel('Total Substation GIC Sum (A/phase)');
-% title('Sweep: w_{doubleCircuit}=w_{length}=w_{value}');
-% legend(leg, 'Location', 'northeast');
-% grid on;
-% xlim([min(x)-0.5, max(x)+0.5]);
-% hold off;
+
+% sweep script
+weights = 0:20:100;
+nW = numel(weights);
+
+% preallocate cell for results vectors
+allSums = cell(nW,1);
+maxLen = 171;
+
+for k = 1:nW
+    w_dc = weights(k);    % double-circuit weight
+    w_len = weights(k);   % length weight
+    w_val = weights(k);   % transformer value weight
+
+    % assemble weights (gic remain 100)
+    w_lines = [100, w_dc, w_len];    % sum maybe <= 300
+    w_trans = [100, w_val];
+
+    % call ranking that uses these weights
+    results= weightRanking(app, topStorms, w_lines, w_trans);
+
+
+    % collect sumGICSubs (assumed vector)
+    s = results.sumGICSubs(:);
+    allSums{k} = s;
+end
+
+% build common x axis 0..maxLen-1
+x = 0:(maxLen-1);
+
+% plot all series on same axes, padding/truncating as needed
+figure; hold on;
+cols = lines(nW);
+leg = cell(nW,1);
+for k = 1:nW
+    s = allSums{k};
+    % extend or truncate to match x length (pad with NaN so plot ignores missing)
+    spad = NaN(size(x));
+    m = numel(s);
+    spad(1:m) = s;
+    plot(x, spad, '-', 'Color', cols(k,:), 'LineWidth', 1.5);
+    leg{k} = sprintf('w = %d', weights(k));
+end
+xlabel('Number of Mitigations Applied');
+ylabel('Total Substation GIC Sum (A/phase)');
+title('Sweep: w_{doubleCircuit}=w_{length}=w_{value}');
+legend(leg, 'Location', 'northeast');
+grid on;
+xlim([min(x)-0.5, max(x)+0.5]);
+hold off;
