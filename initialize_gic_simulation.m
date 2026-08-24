@@ -13,7 +13,7 @@ function [ex, ey, latq, lonq, Bx,By] = initialize_gic_simulation(z_type, zFile, 
 app.StatusTextArea.Value = [app.StatusTextArea.Value; "Loading impedance data..."];
 drawnow;
 
-d = get_Z(z_type, zFile);
+d = get_Z(z_type, zFile,app);
 
 latq = d.loc(:,1);
 lonq = d.loc(:,2);

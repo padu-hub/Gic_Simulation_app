@@ -201,11 +201,6 @@ fprintf(['Node #1       tap       Series (W1)       Node #2\n' ...
 end
 
 %% === Helpers ===
-function appendStatus(app, msg)
-app.StatusTextArea.Value = [app.StatusTextArea.Value; msg];
-drawnow;
-end
-
 function changed = isNetworkChanged(app, L, T, L0, T0)
 changed = ~isequal(extractNetwork(L),  extractNetwork(L0)) || ...
     ~isequal(extractNetwork(T),  extractNetwork(T0)) || ...

@@ -26,6 +26,7 @@ function create_gic_overview_tab(app, S, L, T,  b, GIC, tind, timeInput)
     end
 
     %% === Time Vector ===
+    b= app.b_cleaned;
     timeVec = b(1).times(tind);
     
     %% === LEFT: geoaxes map ===
@@ -92,12 +93,6 @@ function create_gic_overview_tab(app, S, L, T,  b, GIC, tind, timeInput)
     
     Axes = uiaxes(subGrid);
     Axes.Layout.Row = 3;
-    % Plot the sine graph in the tsPanel
-    %plot(Axes, t, y, 'g-', 'LineWidth', 1.5, 'DisplayName', 'Sine Wave');
-    %title(Axes, 'Simple Sine Graph');
-    %xlabel(Axes, 'Time (s)');
-    %ylabel(Axes, 'Amplitude');
-    %legend(Axes, 'show');
 
     % === Setup initial list ===
     updateEntityDropdown();
@@ -150,16 +145,18 @@ function create_gic_overview_tab(app, S, L, T,  b, GIC, tind, timeInput)
         
         % Check if y1 and y2 have only one value
         if numel(y1) == 1 && numel(y2) == 1
-            % Create a histogram-like plot for single values with different colors
-            bar(Axes, [1, 2], [y1, y2], 'FaceColor', 'flat');
-            bObj = Axes.Children; % Get the bar object
-            bObj.CData(1, :) = [1 0 0]; % Set color for edited (red)
-            bObj.CData(2, :) = [0 0 1]; % Set color for original (blue)
-            Axes.XTick = [1, 2];
-            Axes.XTickLabel = {'Edited', 'Original'};
+            % Create bars and get Bar object
+            b = bar(Axes, [1 2], [y1 y2], 'FaceColor', 'flat');
+            % Set colors per bar (rows of CData)
+            b.CData(1,:) = [1 0 0]; % Edited -> red
+            b.CData(2,:) = [0 0 1]; % Original -> blue
+            % Axes formatting
+            Axes.XTick = [1 2];
+            Axes.XTickLabel = {'Edited','Original'};
             ylim(Axes, 'auto');
-            grid(Axes, 'on');
-            hold(Axes, 'off');    
+            Axes.XGrid = 'on';
+            Axes.YGrid = 'on';
+ 
 
         else
             % Plot both y1 and y2, excluding NaN values

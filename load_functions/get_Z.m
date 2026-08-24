@@ -1,4 +1,4 @@
-function d = get_Z(option_flag,zFile)
+function d = get_Z(option_flag,zFile,app)
 % Load impedance data based on option_flag
 
 if option_flag == 1  % Load real 3-D impedance from .mat file
@@ -29,6 +29,7 @@ elseif option_flag == 3  % Trichtchenko 1-D zones
     [d, in] = load_assign_impedance(zn, zFile);
 
     d.Z(abs(real(d.Z(:))) > 1e5) = NaN;
+    app.StatusTextArea.Value = [app.StatusTextArea.Value; "Select 1-D model option..."]; drawnow;
     [d, zn] = calc_Z_trich(d, zn, in);
     d.in = in;
     d.zn = zn;

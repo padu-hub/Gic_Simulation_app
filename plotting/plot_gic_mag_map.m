@@ -54,30 +54,6 @@ switch mode
         latLimFull = latLimFull + [-latPad, latPad];
         lonLimFull = lonLimFull + [-lonPad, lonPad];
 
-        % % === Default close-up limits start as full limits ===
-        % latLimClose = latLimFull;
-        % lonLimClose = lonLimFull;
-
-        % === Ask user for close-up focus ===
-        promptTitle = 'Map Focus Options';
-        prompt = {'centerLat (deg)','centerLon (deg)','latPad (deg)','lonPad (deg)'};
-        opts.WindowStyle = 'modal';
-        answer = inputdlg(prompt, promptTitle, 1, {'53.5','-113.5','0.5','2'}, opts);
-
-        if ~isempty(answer)
-            centerLat = str2double(answer{1});
-            centerLon = str2double(answer{2});
-            padDegLat = str2double(answer{3});
-            padDegLon = str2double(answer{4});
-
-            if ~(isnan(centerLat) || isnan(centerLon) || isnan(padDegLat) || isnan(padDegLon) || padDegLat < 0 || padDegLon < 0)
-                latLimClose = centerLat + [-padDegLat, padDegLat];
-                lonLimClose = centerLon + [-padDegLon, padDegLon];
-            else
-                warning('Invalid focus point inputs. Using automatic limits for close-up map.');
-            end
-        end
-
         % === Determine current GIC data source ===
         if any(isnan(GIC.Subs), 'all')
             currentData = GIC.Original_Subs;
@@ -109,172 +85,190 @@ switch mode
 
         % === Plot 1: Full Alberta map (no E-field) ===
         figure;
-        worldmap(latLimFull, lonLimFull);
-        setm(gca, 'FontSize', 14);
-        hold on;
-
+        axFull = worldmap(latLimFull, lonLimFull);
+        setm(axFull, 'FontSize', 14);
+        hold(axFull, 'on');
+        
+        % Use drawBaseMapAndData but avoid heavy basemap ops there when type ~= "geoshow"
         drawBaseMapAndData(L, app.OriginalL, app.L_plot, subLat, subLon, gicVals, cVals, "geoshow", 10);
-
-        %title([titleStr, ' - Full Alberta'], 'FontSize', 14);
-        hold off;
+        
+        hold(axFull, 'off');
+        
+        % Now prompt user for close-up AFTER the full map is visible
+        promptTitle = 'Map Focus Options';
+        prompt = {'centerLat (deg)','centerLon (deg)','latPad (deg)','lonPad (deg)'};
+        opts.WindowStyle = 'modal';
+        answer = inputdlg(prompt, promptTitle, 1, {'53.5','-113.5','0.5','2'}, opts);
+        if isempty(answer)
+            return;   % user canceled — skip close-up entirely
+        end
 
         % % === Plot 2: Close-up map (with E-field) ===
-        if ~isempty(answer)
-            figure;
-            ax= worldmap(latLimClose, lonLimClose);
-            setm(ax, 'FontSize', 14);
-            hold on;
+        % Parse input
+        centerLat = str2double(answer{1});
+        centerLon = str2double(answer{2});
+        padDegLat = str2double(answer{3});
+        padDegLon = str2double(answer{4});
+        latLimClose = centerLat + [-padDegLat, padDegLat];
+        lonLimClose = centerLon + [-padDegLon, padDegLon];
+        
+        %plot
+        figure;
+        axClose = worldmap(latLimClose, lonLimClose);
+        setm(axClose,'FontSize',14); hold(axClose,'on');
+        
+        provinces = shaperead('province.shp','UseGeoCoords',true);
+        geoshow(axClose, provinces, 'DisplayType','polygon', 'DefaultFaceColor',[0.9 1 0.7], 'EdgeColor','black');
+        states = shaperead('usastatehi','UseGeoCoords',true);
+        geoshow(axClose, states, 'DisplayType','polygon', 'DefaultFaceColor',[0.9 1 0.7], 'EdgeColor','black');
+        
+        axes(axClose);
+        drawBaseMapAndData(L, app.OriginalL, app.L_plot, subLat, subLon, gicVals, cVals, "geoshow", 10);
+        
+        % after drawBaseMapAndData(...)
+        hold(axClose,'on');
+        
+        latV = app.lat_s(:); lonV = app.lon_s(:);    % n×1
+        % get one value per station: take max magnitude per column as you intended
+        u_col = max(abs(app.Ey_s), [], 1);   % east component -> 1×n
+        v_col = max(abs(app.Ex_s), [], 1);   % north component -> 1×n
+        dLat = u_col(:); dLon = v_col(:);   % n×1
+        
+        
+        % plot map-aware vectors: quiverm(lat, lon, dNorth, dEast, scale)
+        quiverm(latV, lonV, dLat, dLon, 0.5, 'Color','k', 'LineWidth', 1);
+        %Orientation still needs fixing
+        hold(axClose,'off');
 
-            [A, RA] = readBasemapImage("streets", latLimClose, lonLimClose);
-            [xGrid, yGrid] = worldGrid(RA);
-            [latGrid, lonGrid] = projinv(RA.ProjectedCRS, xGrid, yGrid);
-          
-            geoshow(latGrid, lonGrid, A)
 
-            if ~isprop(app,'Ex_s') || ~isprop(app,'Ey_s') || isempty(app.Ex_s) || isempty(app.Ey_s)
-                return
-            end
-            
-            ex = app.Ex_s;
-            ey = app.Ey_s;
-
-            if size(ex,1) ~= size(ey,1)
-                error('Ex_s and Ey_s must have same number of time samples.');
-            end
-            
-            [~, idx] = max(sum(hypot(ex,ey),2));   % peak time index
-            ex_t = ex(idx,:).';
-            ey_t = ey(idx,:).';
-
-            axes(ax);                            % make ax current
-            q = quiverm(app.lat_s(:), app.lon_s(:), ey_t(:), ex_t(:));
-            set(q, 'Color', [0.57, 0.14, 0.71]); 
-            
-    
-            drawBaseMapAndData(L, app.OriginalL, app.L_plot, subLat, subLon, gicVals, cVals , "real", 40);
-            
-            % Remove colorbar from the close-up map (second figure)
-            cbClose = findobj(gcf, 'Type', 'ColorBar');
-            if ~isempty(cbClose)
-                delete(cbClose);
-            end
-    
-            % === Overlay E-field only on close-up map ===
-            %emaxT = plotEfield(app, b, subLat, subLon);
-    
-            %title([titleStr, '- Close-Up at ', emaxT], 'FontSize', 16);
-            hold off;
-        end
     otherwise
         error('Unknown mode: %s', mode);
-end
+    end
 end
    
 
-function drawBaseMapAndData(L, L_Original,L_plot, subLat, subLon, gicVals, cVals,type, scale)
-% =========================================================================
-% DRAWBASEMAPANDDATA
-% Draws provinces/states, transmission lines, substations, and cities.
-% =========================================================================    
-    % Only draw background polygons when using 'geoshow' mode
+function drawBaseMapAndData(L, L_Original, L_plot, subLat, subLon, gicVals, cVals, type, scale)
+    % keep shapefile cached and report if load fails
+    persistent provinces states
     if strcmpi(string(type), "geoshow")
-        try
-            provinces = shaperead('province.shp', 'UseGeoCoords', true);
-            geoshow(provinces, 'DisplayType', 'polygon', ...
-                'DefaultFaceColor', [0.9 1 0.7], 'EdgeColor', 'black');
+        if isempty(provinces)
+            try
+                provinces = shaperead('province.shp', 'UseGeoCoords', true);
+            catch ME
+                warning('Could not read province.shp: %s', ME.message);
+                provinces = [];
+            end
+        end
+        if ~isempty(provinces)
+            geoshow(provinces, 'DisplayType', 'polygon', 'DefaultFaceColor', [0.9 1 0.7], 'EdgeColor', 'black');
         end
 
-        try
-            states = shaperead('usastatehi', 'UseGeoCoords', true);
-            geoshow(states, 'DisplayType', 'polygon', ...
-                'DefaultFaceColor', [0.9 1 0.7], 'EdgeColor', 'black');
+        if isempty(states)
+            try
+                states = shaperead('usastatehi', 'UseGeoCoords', true);
+            catch ME
+                warning('Could not read usastatehi: %s', ME.message);
+                states = [];
+            end
+        end
+        if ~isempty(states)
+            geoshow(states, 'DisplayType', 'polygon', 'DefaultFaceColor', [0.9 1 0.7], 'EdgeColor', 'black');
         end
     end
 
-    
-    % Find indices of struct elements that differ
-    openIdx = find(~arrayfun(@(i) isequaln(L(i).Resistance, L_Original(i).Resistance), 1:numel(L)));
-    
-    % get names
-    namesL      = string({L.Name});
-    namesLplot  = string({L_plot.Name});
-    
-    % find mapping from L order to L_plot order
+    % mapping between L and L_plot
+    namesL = string({L.Name});
+    namesLplot = string({L_plot.Name});
     [found, idxLplot] = ismember(namesL, namesLplot);
     if ~all(found)
         error('Some names in L are missing in L_plot.');
     end
-    
-    % reorder L_plot so L_plot(k) corresponds to L(k)
     L_plot = L_plot(idxLplot);
 
-    % === Transmission lines ===
-    for k = 1:numel(L)
+    % compute open/highlight indices
+    openIdx = find(~arrayfun(@(i) isequaln(L(i).Resistance, L_Original(i).Resistance), 1:numel(L)));
 
-        lat = L_plot(k).Loc(:,1);
-        lon = L_plot(k).Loc(:,2);
+    % determine HV lines
+    nL = numel(L);
+    isHV = false(nL,1);
+    if isfield(L, 'Voltage')
+        voltVals = [L.Voltage];
+        isHV = voltVals >= 400;
+    end
 
-        lineColor = 'r';
-        
-        % If this line index is in openIdx, plot it grey elso continue
-        % with the normal voltga color scheme.
-        %if any(openIdx == k)
-        if k == 10 || k == 11
+    % batch line plotting using NaN separators
+    lat_red = []; lon_red = [];
+    lat_blue = []; lon_blue = [];
+    for k = 1:nL
+        if any(k == [10 11])  % keep your skip behavior
             continue
-        else 
-            if isfield(L(k), 'Voltage') && L(k).Voltage >= 400
-                lineColor = 'b';
-            end
-    
-            plotm(lat, lon, '-', 'Color', lineColor, 'LineWidth', 1.5);
+        end
+        latk = L_plot(k).Loc(:,1).';
+        lonk = L_plot(k).Loc(:,2).';
+        if isHV(k)
+            lat_blue = [lat_blue, latk, NaN];
+            lon_blue = [lon_blue, lonk, NaN];
+        else
+            lat_red = [lat_red, latk, NaN];
+            lon_red = [lon_red, lonk, NaN];
         end
     end
 
-    % --- plot open (highlight) lines last so they are on top ---
-    %for k = openIdx(:)'
-    for k = 11    
-        lat = L_plot(k).Loc(:,1);
-        lon = L_plot(k).Loc(:,2);
-        if isfield(L(k), 'Voltage') && L(k).Voltage >= 400
-            lineColor = 'b';
-        end
-
-        plotm(lat, lon, '--', 'Color', lineColor, 'LineWidth', 1.5);
-        
+    % ensure we plot into the active map axes
+    ax = gca;
+    hold(ax, 'on');
+    if ~isempty(lat_red)
+        plotm(lat_red, lon_red, '-', 'Color', 'r', 'LineWidth', 1.5);
+    end
+    if ~isempty(lat_blue)
+        plotm(lat_blue, lon_blue, '-', 'Color', 'b', 'LineWidth', 1.5);
     end
 
-    % === Substation bubbles ===
-    scatterm(subLat, subLon, scale + scale*abs(gicVals), cVals, ...
-        'filled', 'MarkerEdgeColor', 'k');
+    % plot open/highlight lines using openIdx (on top)
+    if ~isempty(openIdx)
+        lat_hl = []; lon_hl = [];
+        for k = openIdx(:).'
+            latk = L_plot(k).Loc(:,1).';
+            lonk = L_plot(k).Loc(:,2).';
+            lat_hl = [lat_hl, latk, NaN];
+            lon_hl = [lon_hl, lonk, NaN];
+        end
+        plotm(lat_hl, lon_hl, '--', 'Color', [0.3 0.3 0.3], 'LineWidth', 1.5);
+    end
 
-    cb = colorbar;
-    cb.Label.String = 'GIC (A/phase)';
-    cb.Label.FontSize = 16; 
-    colormap(redblue(30));
+    % substations
+    sizes = scale + scale .* abs(gicVals(:));
+    hScatter = scatterm(subLat, subLon, sizes, cVals, 'filled', 'MarkerEdgeColor', 'k');
 
-    % === Symmetric color scaling ===
-    maxAbs = max(abs(cVals(:)));
-    if ~isempty(maxAbs) && isfinite(maxAbs) && maxAbs > 0
-        caxis([-maxAbs maxAbs]);
+    % colorbar tied to axes
+    try
+        cb = colorbar(ax);
+        cb.Label.String = 'GIC (A/phase)';
+        cb.Label.FontSize = 16;
+    end
+    if exist('redblue','file') == 2
+        colormap(ax, redblue(30));
     else
-        caxis([-1 1]);
+        colormap(ax, parula(30));
     end
 
-    % === Cities ===
-    cities = {
-        'Edmonton',      53.5461, -113.4938;
-        'Calgary',       51.0477, -114.0719;
-        'Red Deer',      52.2681, -113.8112;
-        'Fort McMurray', 56.7267, -111.3790;
-        'Lethbridge',    49.6942, -112.8328;
-        'Medicine Hat',  50.0405, -110.6765;
-    };
-
-    for i = 1:size(cities,1)
-        plotm(cities{i,2}, cities{i,3}, 'sk', 'MarkerFaceColor', 'b');
-        textm(cities{i,2}, cities{i,3}, cities{i,1}, ...
-            'FontSize', 8, 'VerticalAlignment', 'top');
+    % symmetric color scaling
+    maxAbs = max(abs(cVals(:)));
+    if isfinite(maxAbs) && maxAbs > 0
+        caxis(ax, [-maxAbs maxAbs]);
+    else
+        caxis(ax, [-1 1]);
     end
-    
+
+    % cities
+    cityNames = {'Edmonton','Calgary','Red Deer','Fort McMurray','Lethbridge','Medicine Hat'};
+    cityLat = [53.5461, 51.0477, 52.2681, 56.7267, 49.6942, 50.0405];
+    cityLon = [-113.4938, -114.0719, -113.8112, -111.3790, -112.8328, -110.6765];
+    plotm(cityLat, cityLon, 'sk', 'MarkerFaceColor', 'b');
+    for i = 1:numel(cityNames)
+        textm(cityLat(i), cityLon(i), cityNames{i}, 'FontSize', 8, 'VerticalAlignment', 'top');
+    end
+
+    hold(ax, 'off');
 end
 
