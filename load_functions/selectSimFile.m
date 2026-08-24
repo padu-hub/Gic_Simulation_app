@@ -12,4 +12,4 @@ function filePath = selectSimFile(app, fileType, allowedExt)
         filePath = fullfile(path, file);
         app.StatusTextArea.Value = sprintf('%s file selected: %s', fileType, filePath);
     end
-end
+end - 

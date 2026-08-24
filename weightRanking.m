@@ -1,10 +1,10 @@
 %function result = weightRanking(app, results, w_lines_in, w_trans_in)
-function result = weightRanking(app, results, results_original)
+function result = weightRanking(app, results)
 % Rank lines and transformers into one combined list.
 % Fields: .order, .type, .score (scores in [-100,100])
 
 %Weights (edit as needed)
-w_lines = [100, 0, 100];    % [w_gic, w_doubleCircuit, w_length]
+w_lines = [100, 100, 100];    % [w_gic, w_doubleCircuit, w_length]
 w_trans = [100, 100];        % [w_gic, w_value]
 
 % w_lines = w_lines_in;   % [w_gic, w_doubleCircuit, w_length]
@@ -157,7 +157,7 @@ idx_sorted.score = allScore(orderCombo);
 %plotRanking(lineScore, transScore, allScore, Type, lineIdxAll, transIDs, allIdx)
 % Apply mitigation (preserves function behavior)
 result = mitigateOnOrder(app, idx_sorted);
-plotGICSubsComparison(results, results_original);
+%plotGICSubsComparison(results, results_original);
 end
 
 %% Helper: normalize 0-100 with optional shared min/max

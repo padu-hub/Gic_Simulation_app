@@ -285,7 +285,7 @@ results.parallelGroups = parallelGroups;
 results.modeStr        = modeStr;
 
 %% Save results and plot
-save('mitigation_results.mat', 'results')
+save(' .mat', 'results')
 plotGICMitigationResults(results);
 
 
