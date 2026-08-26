@@ -31,16 +31,7 @@ else
 end
 
 % === Clamp time index to valid GIC range ===
-if isscalar(timeIndex)
-    if timeIndex < tind(1)
-        timeIndex = 1;
-    elseif timeIndex > tind(end)
-        timeIndex = size(GIC.Subs, 2);
-    end
-else
-    timeIndex(timeIndex < tind(1)) = 1;
-    timeIndex(timeIndex > tind(end)) = size(GIC.Subs, 2);
-end
+timeIndex = max(1, min(timeIndex, size(GIC.Subs, 2)));
 
 switch mode
     case {'Max GIC', 'GIC Change', 'Snapshot'}
@@ -49,20 +40,8 @@ switch mode
         subLoc = reshape([S(:).Loc], 2, []).';
         subLat = subLoc(:,1);
         subLon = subLoc(:,2);
+        Line 42         Z
 
-        % === Automatic limits ===
-        % latLimFull = [min(subLat), max(subLat)];
-        % lonLimFull = [min(subLon), max(subLon)];
-
-        % === Alberta province limits ===
-        latLimFull = [49.0, 60.0];
-        lonLimFull = [-120.0, -110.0];
-        
-        latPad = 0.1 * diff(latLimFull);
-        lonPad = 0.1 * diff(lonLimFull);
-
-        latLimFull = latLimFull + [-latPad, latPad];
-        lonLimFull = lonLimFull + [-lonPad, lonPad];
 
         % === Determine current GIC data source ===
         if any(isnan(GIC.Subs), 'all')
@@ -151,9 +130,9 @@ switch mode
         hold(axClose,'off');
 
 
- otherwise
+    otherwise
         error('Unknown mode: %s', mode);
- end
+    end
 end
    
 
