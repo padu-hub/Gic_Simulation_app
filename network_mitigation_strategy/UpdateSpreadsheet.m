@@ -14,40 +14,44 @@ try
     app.gic_originalS=GICbase.Original_Subs;
     app.gic_originalL=GICbase.Original_Lines;
     app.gic_originalT=GICbase.Original_Trans;
-
-    if app.TurnoffallHighvoltagelinesindividuallyCheckBox.Value
-        batch_turnOff500kVLines(app, GICbase);
-    end
-
-    if app.RunothermassindividualmitigationsCheckBox.Value
-            % Get selected text
-        modeUI = app.MitigationModeDropDown.Value;
     
-        % Map UI text to internal modeStr
+    if isprop(app,'mitigationOrder') && ~isempty(app.mitigationOrder) && isfile(app.mitigationOrder)
+        S = load(app.mitigationOrder);
+        fn = fieldnames(S);
+        if ~isempty(fn) && numel(fn)==3   % or check specific field names: all(ismember({'a','b','c'},fn))
+            appendStatus(app, 'mitigating on order...')
+            mitigateOnOrder(app, S);  
+        else
+            appendStatus(app, "missing field from Mitigation order file")
+        end
+    
+    elseif app.TurnoffallHighvoltagelinesindividuallyCheckBox.Value
+        modeStr = 'hv_lines';
+        runGreedyGICMitigation(app, GICbase, modeStr);
+    
+    elseif app.RunothermassindividualmitigationsCheckBox.Value
+        modeUI = app.MitigationModeDropDown.Value;
+        appendStatus(app, "Running on sequencial high GIC mitigation process...")
         switch modeUI
             case 'Mode 1: All Lines and Neutral Blockers'
                 modeStr = 'original';
-    
             case 'Mode 2: Neutral blockers (all wye windings)'
                 modeStr = 'windings_only';
-    
             case 'Mode 3: Any line'
                 modeStr = 'all_lines';
-
             case 'Mode 4: Parallel Lines'
                 modeStr = 'parallel_lines';
-    
             otherwise
-                modeStr = 'original';  % fallback
+                modeStr = 'original';
         end
-    
-        % Run mitigation loop under selected mode
-        app.SpreadsheetTable = runGreedyGICMitigation(app, GICbase, modeStr);
+        runGreedyGICMitigation(app, GICbase, modeStr);
+    else
+        appendStatus(app,'No mitigation type selected');
     end
     app.ClearBtn.Enable  = 'on';
     app.ExportBtn.Enable = 'on';
-
-    app.UpdateLamp.Color = [0 0.7 0]; % green = done
+    app.UpdateLamp.Color = [0 0.7 0];
+    
 catch ME
     app.UpdateLamp.Color = [0.8 0 0]; % red = error
     rethrow(ME)

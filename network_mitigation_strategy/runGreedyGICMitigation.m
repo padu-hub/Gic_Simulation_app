@@ -15,6 +15,9 @@ GICbase.Trans = GICbase.Original_Trans;
 
 %% Decode selected mitigation mode
 modeStr = lower(strtrim(modeStr));
+rows = struct('mitigation', {}, 'MaxTransGIC', {},...
+    'MaxTransName', {}, 'SumGICSubs', {}, 'MaxLinesGIC',{},...
+     'MaxLineName', {})   
 
 switch modeStr
     case 'original'
@@ -41,6 +44,11 @@ switch modeStr
         lineMode    = 'parallel';
         windingMode = '';
 
+    case 'hv_lines'
+        activeLineMitigation    = true;
+        activeWindingMitigation = false;
+        lineMode    = 'hv_line';
+        windingMode = '';
     otherwise
         error('Invalid modeStr: %s', modeStr);
 end
@@ -49,7 +57,7 @@ end
 nLines = numel(app.L);
 nTrans = numel(app.T);
 
-%% Build parallel groups and a line-to-group lookup (computed once)
+%% Build parallel groups or collect HV line
 if strcmp(lineMode, 'parallel')
     parallelGroups = buildParallelGroups(app.L);
 
@@ -74,6 +82,15 @@ if strcmp(lineMode, 'parallel')
             lineInEligibleGroup(parallelGroups{g}) = true;
         end
     end
+elseif strcmp(lineMode, 'hv_line')
+        % Identify high-voltage lines (>= 400 kV)
+        voltVals = [app.L.Voltage];
+        isHV = voltVals >= 400;
+        % No grouping; every HV line is eligible if not already open
+        parallelGroups = {};
+        lineToGroup = zeros(nLines,1);
+        groupAliveCount = [];
+        lineInEligibleGroup = isHV(:);
 else
     parallelGroups      = {};
     lineToGroup         = [];
@@ -143,14 +160,6 @@ app.StatusTextArea.Value = [app.StatusTextArea.Value; baselineMsg];
 app.StatusTextArea.scroll('bottom');
 drawnow limitrate;
 
-%% Flush table to UI (used at intervals and at the end)
-    function flushTable()
-        app.MitigationResults     = cell2table(rowAccum, 'VariableNames', varNames);
-        app.SpreadsheetTable.Data = app.MitigationResults;
-        drawnow limitrate;
-    end
-
-flushTable();
 
 %% Main greedy mitigation loop
 GIC_current = GICbase;
@@ -245,6 +254,14 @@ while true
     maxLineName(rowIdx)  = maxLNameN;
     mitigations{rowIdx}  = description;
     rowAccum(end+1, :)   = {string(description), maxTN, maxTNameN, sumN, maxLN, maxLNameN};
+    
+
+    rows(rowIdx) = struct('mitigation', description,'SumGICSubs', sumN, 'MaxTransGIC', maxTN,...
+    'MaxTransName', maxTNameN, 'MaxLinesGIC',maxLN,...
+     'MaxLineName', maxLNameN);
+
+
+    app.SpreadsheetTable(rowIdx) = rows;
 
     %-- Log step result to status text area --%
     stepMsg = sprintf('Step %d -> TotalGIC = %.2f | MaxTrans = %.2f [%s] | MaxLine = %.2f [%s]', ...
@@ -255,7 +272,8 @@ while true
 
     %-- Flush table to UI every 5 steps --%
     if mod(step, 5) == 0
-        flushTable();
+        app.SpreadsheetTable = rows;
+        drawnow;
     end
 
     step = step + 1;

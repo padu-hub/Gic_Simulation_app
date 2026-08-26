@@ -15,6 +15,9 @@ GICbase.Trans = GICbase.Original_Trans;
 
 %% Decode selected mitigation mode
 modeStr = lower(strtrim(modeStr));
+rows = struct('mitigation', {}, 'MaxTransGIC', {},...
+    'MaxTransName', {}, 'SumGICSubs', {}, 'MaxLinesGIC',{},...
+     'MaxLineName', {})   
 
 switch modeStr
     case 'original'
@@ -41,6 +44,11 @@ switch modeStr
         lineMode    = 'parallel';
         windingMode = '';
 
+    case 'hv_lines'
+        activeLineMitigation    = true;
+        activeWindingMitigation = false;
+        lineMode    = 'hv_line';
+        windingMode = '';
     otherwise
         error('Invalid modeStr: %s', modeStr);
 end
@@ -49,7 +57,7 @@ end
 nLines = numel(app.L);
 nTrans = numel(app.T);
 
-%% Build parallel groups and a line-to-group lookup (computed once)
+%% Build parallel groups or collect HV line
 if strcmp(lineMode, 'parallel')
     parallelGroups = buildParallelGroups(app.L);
 
@@ -74,6 +82,15 @@ if strcmp(lineMode, 'parallel')
             lineInEligibleGroup(parallelGroups{g}) = true;
         end
     end
+elseif strcmp(lineMode, 'hv_line')
+        % Identify high-voltage lines (>= 400 kV)
+        voltVals = [app.L.Voltage];
+        isHV = voltVals >= 400;
+        % No grouping; every HV line is eligible if not already open
+        parallelGroups = {};
+        lineToGroup = zeros(nLines,1);
+        groupAliveCount = [];
+        lineInEligibleGroup = isHV(:);
 else
     parallelGroups      = {};
     lineToGroup         = [];
@@ -245,6 +262,14 @@ while true
     maxLineName(rowIdx)  = maxLNameN;
     mitigations{rowIdx}  = description;
     rowAccum(end+1, :)   = {string(description), maxTN, maxTNameN, sumN, maxLN, maxLNameN};
+    
+
+    rows(ro) = struct('mitigation', description,'SumGICSubs', sumN, 'MaxTransGIC', maxTN,...
+    'MaxTransName', maxTNameN, 'MaxLinesGIC',maxLN,...
+     'MaxLineName', maxLNameN);
+
+
+    app.SpreadsheetTable(rowIdx) = rows;
 
     %-- Log step result to status text area --%
     stepMsg = sprintf('Step %d -> TotalGIC = %.2f | MaxTrans = %.2f [%s] | MaxLine = %.2f [%s]', ...
@@ -255,7 +280,7 @@ while true
 
     %-- Flush table to UI every 5 steps --%
     if mod(step, 5) == 0
-        flushTable();
+        drawnow
     end
 
     step = step + 1;
@@ -285,7 +310,7 @@ results.parallelGroups = parallelGroups;
 results.modeStr        = modeStr;
 
 %% Save results and plot
-save('mitigation_results.mat', 'results')
+save(' .mat', 'results')
 plotGICMitigationResults(results);
 
 
@@ -320,20 +345,21 @@ plotGICMitigationResults(results);
         sumVal  = max(totPerT, [], 'omitnan');
 
         % Max transformer winding GIC
-        if isfield(GIC, 'Trans') && ~isempty(GIC.Trans)            
-            % Take absolute after summing windings 
-            transAbs = squeeze(sum(abs(GIC.Trans), 2)); 
+        if isfield(GIC, 'Trans') && ~isempty(GIC.Trans)                   
+            % GIC.Trans is Nx2xM: choose larger winding per transformer -> transAbs is NxM
+            transAbs = squeeze(max(abs(GIC.Trans), [], 2));  % result: N x M (be careful if N==1 or M==1)
+           
             [maxT, linIdx] = max(transAbs, [], 'all', 'omitnan');
-
+            
             if isempty(maxT) || isnan(maxT)
-                maxT = 0; maxTName = "None";
+                maxT = 0;
+                maxTName = "None";
             else
-                [row, col] = ind2sub(size(transAbs), linIdx);
-                [tIdx, wIdx] = ind2sub(size(transAbs), linIdx);
+                [tIdx, ~] = ind2sub(size(transAbs), linIdx);  % tIdx = transformer row
                 if isfield(app.T(tIdx), 'Name')
-                    maxTName = string(app.T(tIdx).Name) + " (W" + wIdx + ")";
+                    maxTName = string(app.T(tIdx).Name);
                 else
-                    maxTName = "Transformer " + tIdx + " (W" + wIdx + ")";
+                    maxTName = "Transformer " + tIdx;
                 end
             end
         else
