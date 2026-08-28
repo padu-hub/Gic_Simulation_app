@@ -13,7 +13,7 @@ function [type, idx, val] = selectWorstGICElement(GIC, candLines, candWind)
     % Windings
     for n = 1:size(candWind,1)
         k = candWind(n,1); w = candWind(n,2);
-        mx = max(abs(GIC.Trans(k,w,:)),[],'omitnan');
+        mx = max(abs(GIC.Trans(k,:,:)),[],'omitnan');
         vals(end+1) = mx;
         types{end+1} = 'winding';
         idxs{end+1}  = [k w];

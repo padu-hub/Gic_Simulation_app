@@ -29,7 +29,7 @@ function [app, lineOpen, windingBlocked, desc] = ...
                 end
             end
 
-            desc = sprintf('Blocked transformer %d winding W%d\n', app.T(k).Name, w);
+            desc = sprintf('Blocked transformer %s', app.T(k).Name);
         
         otherwise
             error('Unknown mitigation type.');

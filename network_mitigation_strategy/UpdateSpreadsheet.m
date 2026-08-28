@@ -20,14 +20,14 @@ try
         fn = fieldnames(S);
         if ~isempty(fn) && numel(fn)==3   % or check specific field names: all(ismember({'a','b','c'},fn))
             appendStatus(app, 'mitigating on order...')
-            mitigateOnOrder(app, S);  
+            app.massMitigResults = mitigateOnOrder(app, S);  
         else
             appendStatus(app, "missing field from Mitigation order file")
         end
     
     elseif app.TurnoffallHighvoltagelinesindividuallyCheckBox.Value
         modeStr = 'hv_lines';
-        runGreedyGICMitigation(app, GICbase, modeStr);
+        app.massMitigResults = runGreedyGICMitigation(app, GICbase, modeStr);
     
     elseif app.RunothermassindividualmitigationsCheckBox.Value
         modeUI = app.MitigationModeDropDown.Value;
@@ -44,7 +44,7 @@ try
             otherwise
                 modeStr = 'original';
         end
-        runGreedyGICMitigation(app, GICbase, modeStr);
+        app.massMitigResults = runGreedyGICMitigation(app, GICbase, modeStr);
     else
         appendStatus(app,'No mitigation type selected');
     end

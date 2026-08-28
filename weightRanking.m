@@ -1,11 +1,11 @@
 %function result = weightRanking(app, results, w_lines_in, w_trans_in)
-function result = weightRanking(app, results)
+function weightRanking(app, results)
 % Rank lines and transformers into one combined list.
 % Fields: .order, .type, .score (scores in [-100,100])
 
 %Weights (edit as needed)
-w_lines = [100, 100, 100];    % [w_gic, w_doubleCircuit, w_length]
-w_trans = [100, 100];        % [w_gic, w_value]
+w_lines = [100, 0, 100];    % [w_gic, w_doubleCircuit, w_length]
+w_trans = [100, 0];        % [w_gic, w_value]
 
 % w_lines = w_lines_in;   % [w_gic, w_doubleCircuit, w_length]
 % w_trans = w_trans_in;   % [w_gic, w_value]
@@ -149,14 +149,19 @@ allScore = [lineScore; transScore];
 Type = [repmat("Line", numel(lineIdxAll), 1); repmat("Trans", numel(transIDs), 1)];
 
 [~, orderCombo] = sort(allScore, 'descend', 'MissingPlacement', 'last');
-idx_sorted.order = allIdx(orderCombo);
+idx_sorted.name = allIdx(orderCombo);
 idx_sorted.type  = Type(orderCombo);
 idx_sorted.score = allScore(orderCombo);
 
+% Save idx_sorted with timestamp
+ts = datestr(now,'yyyy-mm-dd_HH-MM-SS');
+fname = sprintf('mitigateorder_%s.mat', ts);
+mitigateorder = idx_sorted; 
+save(fname, 'mitigateorder');
 
 %plotRanking(lineScore, transScore, allScore, Type, lineIdxAll, transIDs, allIdx)
 % Apply mitigation (preserves function behavior)
-result = mitigateOnOrder(app, idx_sorted);
+%result = mitigateOnOrder(app, idx_sorted);
 %plotGICSubsComparison(results, results_original);
 end
 
